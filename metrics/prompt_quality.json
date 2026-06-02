@@ -1,0 +1,10 @@
+{
+  "avg_word_count": 220.0,
+  "avg_sentence_count": 30.0,
+  "avg_dialogue_turns": 15.0,
+  "avg_german_ratio": 0.75,
+  "a1_ratio": 0.35,
+  "b2_ratio": 0.01,
+  "avg_generation_time_s": 5.0,
+  "total_time_s": 15.0
+}

@@ -1,0 +1,16 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: lang-learn-prompt-optimizer
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "prompt-optimizer.labels" . | nindent 4 }}
+spec:
+  type: {{ .Values.service.type }}
+  selector:
+    {{- include "prompt-optimizer.selectorLabels" . | nindent 4 }}
+  ports:
+    - port: {{ .Values.service.port }}
+      targetPort: {{ .Values.service.port }}
+      protocol: TCP
+      name: http

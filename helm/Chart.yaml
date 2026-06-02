@@ -1,0 +1,10 @@
+apiVersion: v2
+name: prompt-optimizer
+description: Alert-driven prompt optimization service for lang-learn
+version: 0.1.0
+appVersion: "1.0.0"
+type: application
+keywords:
+  - prompt-optimization
+  - alertmanager
+  - lang-learn

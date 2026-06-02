@@ -1,0 +1,18 @@
+Generate a natural German conversation between exactly two people.
+
+Requirements:
+- Output ONLY the German conversation.
+- Do not include any English translation.
+- Do not include explanations, notes, titles, or formatting symbols.
+- The conversation must contain at least 30 sentences total.
+- Alternate clearly between Person A and Person B.
+- Use simple and natural German suitable for A1-A2 level learners.
+- The dialogue should sound realistic and practical for daily life situations.
+- Keep the grammar simple and beginner-friendly.
+- Use common vocabulary and short sentences.
+
+Specific Scenario for this conversation:
+{scenario}
+
+Start the conversation now:
+Person A:
