@@ -52,7 +52,7 @@ def _load_current_prompt() -> str:
         "Requirements:\n"
         "- Output ONLY the German conversation.\n"
         "- Do not include any English translation.\n"
-        "- The conversation must contain at least 17 sentences total.\n"
+        "- The conversation must contain at least 20 sentences total.\n"
         "- Alternate clearly between Person A and Person B.\n"
         "- Use simple and natural German suitable for A1-A2 level learners.\n\n"
         "Specific Scenario for this conversation:\n{scenario}\n\n"

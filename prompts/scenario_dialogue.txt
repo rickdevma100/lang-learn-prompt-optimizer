@@ -4,7 +4,7 @@ Requirements:
 - Output ONLY the German conversation.
 - Do not include any English translation.
 - Do not include explanations, notes, titles, or formatting symbols.
-- The conversation must contain at least 17 sentences total.
+- The conversation must contain at least 20 sentences total.
 - Alternate clearly between Person A and Person B.
 - Use simple and natural German suitable for A1-A2 level learners.
 - The dialogue should sound realistic and practical for daily life situations.
