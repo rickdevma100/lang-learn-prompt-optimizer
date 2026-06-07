@@ -48,12 +48,11 @@ def _load_current_prompt() -> str:
 
     logger.warning("prompts/scenario_dialogue.txt not found — using built-in default.")
     return (
-        "Generate a natural German conversation between exactly two people.\n\n"
+        "Generate a natural German conversation between exactly two people, including their English translations.\n\n"
         "Requirements:\n"
-        "- Output ONLY the German conversation.\n"
-        "- Do not include any English translation.\n"
-        "- The conversation must contain at least 20 sentences total.\n"
         "- Alternate clearly between Person A and Person B.\n"
+        "- For each turn, write the German sentence first, followed immediately by its English translation on the next line starting with \"Translation: \".\n"
+        "- The conversation must contain at least 20 sentences total.\n"
         "- Use simple and natural German suitable for A1-A2 level learners.\n\n"
         "Specific Scenario for this conversation:\n{scenario}\n\n"
         "Start the conversation now:\nPerson A:"
