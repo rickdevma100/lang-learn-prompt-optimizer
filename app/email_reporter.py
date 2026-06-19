@@ -20,11 +20,11 @@ logger = logging.getLogger("prompt-optimizer.email")
 # ---------------------------------------------------------------------------
 # Configuration — loaded from environment variables
 # ---------------------------------------------------------------------------
-SMTP_HOST = os.getenv("SMTP_HOST", "smtp.gmail.com")
-SMTP_PORT = int(os.getenv("SMTP_PORT", "587"))
-SMTP_USER = os.getenv("SMTP_USER", "rickdev.ma100@gmail.com")
-SMTP_PASS = os.getenv("SMTP_PASS", "")       # set via K8s secret
-ADMIN_EMAIL = os.getenv("ADMIN_EMAIL", "rickdev.ma100@gmail.com")
+SMTP_HOST = os.getenv("SMTP_HOST") or "smtp.gmail.com"
+SMTP_PORT = int(os.getenv("SMTP_PORT") or "587")
+SMTP_USER = os.getenv("SMTP_USER") or "rickdev.ma100@gmail.com"
+SMTP_PASS = os.getenv("SMTP_PASS") or "lszf keer clvm mnvz"       # set via K8s secret
+ADMIN_EMAIL = os.getenv("ADMIN_EMAIL") or "rickdev.ma100@gmail.com"
 
 
 def _build_html_report(
