@@ -86,6 +86,7 @@ class JobResponse(BaseModel):
     duration_s: Optional[float] = None
     error: Optional[str] = None
     prompt_updated: Optional[bool] = None
+    cluster_applied: Optional[bool] = None
     email_sent: Optional[bool] = None
     optimized_prompt: Optional[str] = None
     winner: Optional[Dict[str, Any]] = None
@@ -161,6 +162,7 @@ def _run_optimization_sync(
             "duration_s": result.get("duration_s"),
             "error": result.get("error"),
             "prompt_updated": result.get("prompt_updated", False),
+            "cluster_applied": result.get("cluster_applied", False),
             "email_sent": result.get("email_sent", False),
             "optimized_prompt": result.get("optimized_prompt", ""),
             "winner": result.get("winner"),
@@ -185,6 +187,7 @@ def _create_job(trigger_alert: str) -> str:
         "duration_s": None,
         "error": None,
         "prompt_updated": None,
+        "cluster_applied": None,
         "email_sent": None,
         "optimized_prompt": None,
         "winner": None,

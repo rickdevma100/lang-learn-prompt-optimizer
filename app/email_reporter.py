@@ -34,6 +34,7 @@ def _build_html_report(
     winner: dict,
     current: dict,
     all_candidates: list[dict],
+    cluster_applied: bool = False,
 ) -> str:
     """Build an HTML email body with the full benchmark comparison."""
 
@@ -105,10 +106,13 @@ def _build_html_report(
   <h2>✅ New Prompt</h2>
   <div class="prompt-box">{new_prompt}</div>
 
+  <h2>🚀 Cluster Deployment</h2>
+  {_cluster_status_html(cluster_applied)}
+
   <h2>📋 Recommendation</h2>
   <p><strong>Prompt Updated Successfully</strong> — The new prompt has been written to
   <code>prompts/scenario_dialogue.txt</code> in the optimizer service. The previous prompt has been
-  archived. Please review and redeploy the inference service with the updated prompt.</p>
+  archived.</p>
 
 
   <hr/>
@@ -118,6 +122,23 @@ def _build_html_report(
 """
 
 
+def _cluster_status_html(cluster_applied: bool) -> str:
+    """Generate HTML snippet for the cluster deployment status."""
+    if cluster_applied:
+        return (
+            '<p style="color:green;"><strong>✅ Prompt auto-applied to inference service.</strong></p>'
+            '<p>The <code>prompts</code> ConfigMap has been updated and inference pods '
+            'have been restarted with the new prompt.</p>'
+        )
+    return (
+        '<p style="color:orange;"><strong>⚠️ Auto-apply not performed.</strong></p>'
+        '<p>The prompt was saved locally but was NOT applied to the cluster. '
+        'This may be because the prompt did not improve, or because the Kubernetes '
+        'API was unreachable. To apply manually, run:<br/>'
+        '<code>kubectl edit cm prompts -n lang-learn</code></p>'
+    )
+
+
 def send_optimization_report(
     alert_name: str,
     old_prompt: str,
@@ -125,6 +146,7 @@ def send_optimization_report(
     winner: dict,
     current: dict,
     all_candidates: list[dict],
+    cluster_applied: bool = False,
 ) -> bool:
     """Send the benchmark comparison + updated prompt email to the admin.
 
@@ -144,7 +166,10 @@ def send_optimization_report(
         return False
 
     subject = f"[PROMPT OPTIMIZATION] New Prompt Selected — {alert_name}"
-    html_body = _build_html_report(alert_name, old_prompt, new_prompt, winner, current, all_candidates)
+    html_body = _build_html_report(
+        alert_name, old_prompt, new_prompt, winner, current,
+        all_candidates, cluster_applied,
+    )
     text_body = (
         f"Alert: {alert_name}\n"
         f"Winner: {winner['name']} (score={winner['score']:.3f})\n"

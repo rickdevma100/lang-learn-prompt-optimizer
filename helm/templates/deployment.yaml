@@ -15,6 +15,7 @@ spec:
       labels:
         {{- include "prompt-optimizer.labels" . | nindent 8 }}
     spec:
+      serviceAccountName: prompt-optimizer
       containers:
         - name: prompt-optimizer
           image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
@@ -74,6 +75,9 @@ spec:
             - name: optimizer-data
               mountPath: /app/metrics
               subPath: metrics
+            - name: optimizer-data
+              mountPath: /app/.dvc/tmp/exps
+              subPath: dvc-exps
           {{- end }}
 
       {{- if .Values.persistence.enabled }}

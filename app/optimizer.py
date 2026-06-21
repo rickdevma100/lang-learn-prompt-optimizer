@@ -158,6 +158,7 @@ async def run_prompt_optimization(
         "winner":            None,
         "all_candidates":    [],
         "prompt_updated":    False,
+        "cluster_applied":   False,
         "email_sent":        False,
     }
 
@@ -166,8 +167,8 @@ async def run_prompt_optimization(
         current_prompt = base_prompt.strip() if base_prompt.strip() else _load_current_prompt()
         result["base_prompt"] = current_prompt
 
-        # Step 2 — run experiments (calls inference service via HTTP, no DVC)
-        logger.info("Benchmarking candidate prompts against inference service…")
+        # Step 2 — run DVC experiments against inference service
+        logger.info("Benchmarking candidate prompts via DVC experiments…")
         ranked = run_experiments(current_prompt)
         result["all_candidates"] = ranked
 
@@ -196,20 +197,26 @@ async def run_prompt_optimization(
             result["optimized_prompt"] = current_prompt
             result["winner"]           = current_cand
         else:
-            # Step 4 — archive old, write winner
+            # Step 4a — archive old, write winner locally
             _archive_and_save(new_prompt)
             result["optimized_prompt"] = new_prompt
             result["winner"]           = winner
             result["prompt_updated"]   = True
 
+            # Step 4b — apply to cluster (patch ConfigMap + restart inference pods)
+            from app.cluster_apply import apply_prompt_to_cluster
+            apply_ok = apply_prompt_to_cluster(new_prompt)
+            result["cluster_applied"] = apply_ok
+
         # Step 5 — email report
         email_ok = send_optimization_report(
-            alert_name    = trigger_alert,
-            old_prompt    = current_prompt,
-            new_prompt    = result["optimized_prompt"],
-            winner        = result["winner"],
-            current       = current_cand,
-            all_candidates= ranked,
+            alert_name      = trigger_alert,
+            old_prompt      = current_prompt,
+            new_prompt      = result["optimized_prompt"],
+            winner          = result["winner"],
+            current         = current_cand,
+            all_candidates  = ranked,
+            cluster_applied = result["cluster_applied"],
         )
         result["email_sent"] = email_ok
 
@@ -221,6 +228,7 @@ async def run_prompt_optimization(
             f"=== Optimization DONE  job_id={job_id}  "
             f"duration={result['duration_s']}s  "
             f"updated={result['prompt_updated']}  "
+            f"cluster={result['cluster_applied']}  "
             f"email={result['email_sent']} ==="
         )
 
