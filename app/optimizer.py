@@ -60,24 +60,64 @@ def _load_current_prompt() -> str:
 
 
 def _archive_and_save(new_prompt: str) -> None:
-    """Archive the current prompt then write the new one."""
+    """Archive the current prompt then write the new one atomically."""
     ARCHIVE_DIR.mkdir(parents=True, exist_ok=True)
     if CURRENT_PROMPT_FILE.exists():
         ts = datetime.now(timezone.utc).strftime("%Y%m%d_%H%M%S")
         archive_path = ARCHIVE_DIR / f"scenario_dialogue_{ts}.txt"
-        shutil.copy(CURRENT_PROMPT_FILE, archive_path)
-        logger.info(f"Archived old prompt → {archive_path.name}")
+        try:
+            shutil.copy(CURRENT_PROMPT_FILE, archive_path)
+            logger.info(f"Archived old prompt → {archive_path.name}")
+        except Exception as e:
+            logger.warning(f"Failed to archive old prompt: {e}")
 
-    CURRENT_PROMPT_FILE.write_text(new_prompt, encoding="utf-8")
-    logger.info(f"Updated prompt written to {CURRENT_PROMPT_FILE}")
+    tmp_path = CURRENT_PROMPT_FILE.with_suffix(".txt.tmp")
+    try:
+        tmp_path.write_text(new_prompt, encoding="utf-8")
+        os.replace(tmp_path, CURRENT_PROMPT_FILE)
+        logger.info(f"Updated prompt written to {CURRENT_PROMPT_FILE}")
+    except Exception as e:
+        logger.error(f"Failed to write updated prompt atomically: {e}")
+        if tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+        raise
 
 
 def _build_new_prompt(base: str, winner: dict) -> str:
-    """Append the winner's suffix to the base prompt (if any)."""
+    """Rewrite prompt by calling the BentoML rewrite_prompt API, with fallback to simple append."""
     suffix = winner.get("suffix", "").strip()
     if not suffix:
         return base
+
+    from app.experiment_runner import INFERENCE_URL
+    from app.utils import post_json
+
+    if "/scenario_dialogue" in INFERENCE_URL:
+        rewrite_url = INFERENCE_URL.replace("/scenario_dialogue", "/rewrite_prompt")
+    else:
+        rewrite_url = INFERENCE_URL.rstrip("/") + "/rewrite_prompt"
+
+    logger.info(f"Attempting to rewrite prompt using LLM endpoint: {rewrite_url}")
+    payload = {
+        "base_prompt": base,
+        "suffix": suffix,
+        "temperature": 0.3,
+        "max_tokens": 1024,
+    }
+
+    result = post_json(rewrite_url, payload, timeout=120)
+    if result and isinstance(result, dict) and "prompt" in result:
+        new_prompt = result["prompt"]
+        logger.info("Successfully generated cohesive prompt via BentoML rewrite endpoint.")
+        return new_prompt
+
+    logger.info("Falling back to simple concatenation for prompt update.")
     return base.rstrip() + "\n" + suffix
+
+
 
 
 

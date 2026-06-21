@@ -13,9 +13,10 @@ import logging
 import os
 import re
 import time
-import urllib.error
-import urllib.request
 from pathlib import Path
+
+from app.vocab import A1_WORDS, B2_WORDS
+from app.utils import post_json
 
 logger = logging.getLogger("prompt-optimizer.runner")
 
@@ -38,40 +39,6 @@ BENCHMARK_SCENARIOS = [
     "asking for directions at the train station",
     "shopping for clothes",
 ]
-
-# ---------------------------------------------------------------------------
-# Vocabulary sets (copied from evaluate_prompts.py — single source of truth)
-# ---------------------------------------------------------------------------
-A1_WORDS = frozenset([
-    "ich", "du", "er", "sie", "es", "wir", "ihr",
-    "bin", "bist", "ist", "sind", "seid",
-    "habe", "hast", "hat", "haben", "habt",
-    "ja", "nein", "bitte", "danke",
-    "hallo", "guten", "morgen", "tag", "abend",
-    "und", "oder", "aber", "nicht", "kein", "keine",
-    "der", "die", "das", "ein", "eine",
-    "was", "wer", "wo", "wie", "wann", "warum",
-    "gut", "schlecht", "groß", "klein",
-    "hier", "dort", "heute", "morgen", "jetzt",
-    "essen", "trinken", "gehen", "kommen", "machen",
-    "möchte", "kann", "muss", "will", "soll",
-    "mit", "von", "zu", "in", "auf", "an", "für",
-    "eins", "zwei", "drei", "vier", "fünf",
-])
-
-B2_WORDS = frozenset([
-    "allerdings", "beziehungsweise", "dementsprechend",
-    "einverstanden", "folglich", "grundsätzlich",
-    "hinsichtlich", "infolgedessen", "jedenfalls",
-    "keineswegs", "letztendlich", "möglicherweise",
-    "nichtsdestotrotz", "obwohl", "prinzipiell",
-    "selbstverständlich", "tatsächlich", "übrigens",
-    "vermutlich", "wahrscheinlich", "zufolge",
-    "berücksichtigen", "beeinflussen", "entwickeln",
-    "erörtern", "feststellen", "gewährleisten",
-    "hervorheben", "unterscheiden", "voraussetzen",
-    "zusammenfassen", "außerdem", "darüber",
-])
 
 # ---------------------------------------------------------------------------
 # Candidate prompt variations (no DVC params — just text modifications)
@@ -132,9 +99,11 @@ def _score_text(text: str) -> dict:
     a1_count = sum(1 for w in words if w in A1_WORDS)
     b2_count = sum(1 for w in words if w in B2_WORDS)
 
-    german_specific = len(re.findall(r"[äöüÄÖÜß]", text))
-    total_alpha     = len(re.findall(r"[a-zA-ZäöüÄÖÜß]", text)) or 1
-    german_ratio    = round(german_specific / total_alpha, 3)
+    # Calculate German character ratio consistent with evaluate_prompts.py
+    total_alpha = len(re.findall(r"[a-zA-ZäöüÄÖÜß]", text)) or 1
+    cleaned = re.sub(r"Person [AB]:", "", text)
+    alpha_chars = len(re.findall(r"[a-zA-ZäöüÄÖÜß]", cleaned))
+    german_ratio = round(alpha_chars / total_alpha, 3)
 
     turns = len(re.findall(r"Person [AB]:", text))
 
@@ -157,8 +126,11 @@ def _composite_score(metrics: dict) -> float:
     latency = float(metrics.get("avg_generation_time_s", 5.0))
     lat_ok  = max(0.0, 1.0 - latency / 60.0)
 
+    # Scale the A1 vocabulary ratio so that 45% is considered a perfect vocabulary score
+    a1_scaled = min(a1 / 0.45, 1.0)
+
     return round(
-        0.40 * a1
+        0.40 * a1_scaled
         + 0.25 * german
         + 0.15 * turns
         + 0.10 * lat_ok
@@ -173,30 +145,21 @@ def _composite_score(metrics: dict) -> float:
 
 def _call_inference(prompt_text: str, scenario: str, temperature: float, max_tokens: int) -> tuple[str, float]:
     """Call the inference service with a full prompt and return (response_text, latency_s)."""
-    filled = prompt_text.replace("{scenario}", scenario)
-
-    payload = json.dumps({
+    payload = {
         "scenario":    scenario,
         "max_tokens":  max_tokens,
         "temperature": temperature,
-    }).encode("utf-8")
-
-    req = urllib.request.Request(
-        INFERENCE_URL,
-        data=payload,
-        headers={"Content-Type": "application/json"},
-        method="POST",
-    )
+    }
 
     t0 = time.time()
-    try:
-        with urllib.request.urlopen(req, timeout=300) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
-        elapsed = time.time() - t0
-        return body.get("response", ""), elapsed
-    except Exception as e:
-        logger.warning(f"Inference call failed: {e}")
-        return "", time.time() - t0
+    result = post_json(INFERENCE_URL, payload, timeout=300)
+    elapsed = time.time() - t0
+
+    if result and isinstance(result, dict) and "response" in result:
+        return result["response"], elapsed
+
+    logger.warning(f"Inference call failed or returned invalid response format for scenario: {scenario}")
+    return "", elapsed
 
 
 def _benchmark_candidate(base_prompt: str, candidate: dict) -> dict:
