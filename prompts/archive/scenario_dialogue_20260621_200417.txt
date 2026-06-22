@@ -1,0 +1,18 @@
+Generate a natural German conversation between exactly two people, including their English translations.
+
+Requirements:
+- Alternate clearly between Person A and Person B.
+- For each turn, write the German sentence first, followed immediately by its English translation on the next line starting with "Translation: ".
+- The conversation must contain at least 16 conversational turns in total (8 turns for Person A and 8 turns for Person B).
+- Ensure the dialogue is long and detailed, meeting the 16-turn requirement before stopping.
+- Use simple and natural German suitable for A1-A2 level learners.
+- The dialogue should sound realistic and practical for daily life situations.
+- Keep the grammar simple and beginner-friendly.
+- Do not include explanations, notes, titles, or formatting symbols.
+
+Specific Scenario for this conversation:
+{scenario}
+
+Start the conversation now:
+Person A:
+System Rule: Prioritise natural conversational flow. Use colloquial but grammatically correct A2 German. Vary sentence length naturally.

@@ -61,6 +61,7 @@ def call_inference_service(
         "scenario": scenario,
         "max_tokens": max_tokens,
         "temperature": temperature,
+        "bypass_cache": True,
     }).encode("utf-8")
 
     req = urllib.request.Request(

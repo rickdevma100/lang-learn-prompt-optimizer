@@ -3,8 +3,7 @@
 Runs `dvc exp run` for each candidate prompt variation, reads the resulting
 metrics from metrics/prompt_quality.json, and ranks candidates by quality_score.
 
-This replaces the previous inline scoring approach. All scoring logic now
-lives in app/evaluate_prompts.py (the DVC pipeline stage).
+All scoring logic lives in app/evaluate_prompts.py (the DVC pipeline stage).
 """
 from __future__ import annotations
 
@@ -97,10 +96,15 @@ def _run_dvc_experiment(candidate: dict) -> dict | None:
     temperature = candidate["temperature"]
     max_tokens = candidate["max_tokens"]
 
+    # DVC uses Hydra override grammar — string values with special chars
+    # (periods, commas, etc.) must be single-quoted.  Strip the leading
+    # newline that some suffixes contain since it breaks the Hydra lexer.
+    escaped_suffix = suffix.lstrip("\n")
+
     cmd = [
         "dvc", "exp", "run", "--force",
         "-S", f"candidate.name={name}",
-        "-S", f"candidate.suffix={suffix}",
+        "-S", f"candidate.suffix='{escaped_suffix}'",
         "-S", f"inference.temperature={temperature}",
         "-S", f"inference.max_tokens={max_tokens}",
     ]
