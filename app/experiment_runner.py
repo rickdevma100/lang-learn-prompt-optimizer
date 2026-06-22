@@ -73,6 +73,50 @@ CANDIDATES = [
         "temperature": 0.7,
         "max_tokens":  1024,
     },
+    {
+        "name":        "structured",
+        "description": "Numbered turns with clear speaker labels",
+        "suffix":      (
+            "\nSystem Rule: Number each turn sequentially. "
+            "Format each turn as '1. Person A:' and '2. Person B:' etc. "
+            "Include exactly one sentence per turn to keep the dialogue clear and scannable."
+        ),
+        "temperature": 0.5,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "immersive",
+        "description": "German-only output — no English translations",
+        "suffix":      (
+            "\nSystem Rule: Output ONLY German. Do not include any English text at all. "
+            "Do not include 'Translation:' lines. The learner should immerse fully in German. "
+            "Use only A1-A2 vocabulary so the dialogue is understandable without translation."
+        ),
+        "temperature": 0.8,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "situational",
+        "description": "Rich context — emotions, props, and stage directions",
+        "suffix":      (
+            "\nSystem Rule: Add brief context notes in parentheses before each turn, "
+            "describing the speakers mood or action, e.g. '(lächelt)' or '(zeigt auf die Karte)'. "
+            "Keep notes in simple German. This helps learners understand conversational nuance."
+        ),
+        "temperature": 0.7,
+        "max_tokens":  768,
+    },
+    {
+        "name":        "balanced",
+        "description": "Mid-range temperature with inline vocabulary notes",
+        "suffix":      (
+            "\nSystem Rule: After every 4th exchange, insert a short vocabulary note line "
+            "starting with 'Vokabeln:' listing 2-3 key words from the preceding turns with "
+            "their English meanings. Keep the main dialogue in A1-A2 German with translations."
+        ),
+        "temperature": 0.6,
+        "max_tokens":  768,
+    },
 ]
 
 

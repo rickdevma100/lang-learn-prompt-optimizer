@@ -107,6 +107,7 @@ def restart_inference_pods() -> bool:
     Returns True on success, False on failure.
     """
     try:
+        # pyrefly: ignore [missing-import]
         from kubernetes import client
 
         _load_k8s_config()
