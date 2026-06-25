@@ -17,15 +17,6 @@ spec:
         {{- include "mlflow.labels" . | nindent 8 }}
         {{- include "mlflow.server.selectorLabels" . | nindent 8 }}
     spec:
-      initContainers:
-        # Install psycopg2-binary so MLflow can connect to PostgreSQL
-        - name: install-pg-driver
-          image: {{ .Values.mlflow.image }}
-          command: ["pip", "install", "--target", "/shared-libs", "psycopg2-binary"]
-          volumeMounts:
-            - name: shared-libs
-              mountPath: /shared-libs
-
       containers:
         - name: mlflow
           image: {{ .Values.mlflow.image }}
@@ -39,21 +30,16 @@ spec:
                 secretKeyRef:
                   name: {{ .Values.postgres.secretName }}
                   key: {{ .Values.postgres.secretKey }}
-            # Add shared libs to Python path so psycopg2 is available
-            - name: PYTHONPATH
-              value: /shared-libs
 
-          command: ["mlflow"]
+          command: ["/bin/bash", "-c"]
           args:
-            - "server"
-            - "--backend-store-uri"
-            - "postgresql://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@mlflow-postgres:5432/{{ .Values.postgres.database }}"
-            - "--default-artifact-root"
-            - {{ .Values.mlflow.artifactRoot | quote }}
-            - "--host"
-            - "0.0.0.0"
-            - "--port"
-            - {{ .Values.mlflow.port | quote }}
+            - |
+              pip install --quiet mlflow=={{ .Values.mlflow.version }} psycopg2-binary &&
+              mlflow server \
+                --backend-store-uri "postgresql://{{ .Values.postgres.user }}:$(POSTGRES_PASSWORD)@mlflow-postgres:5432/{{ .Values.postgres.database }}" \
+                --default-artifact-root {{ .Values.mlflow.artifactRoot }} \
+                --host 0.0.0.0 \
+                --port {{ .Values.mlflow.port }}
 
           resources:
             {{- toYaml .Values.mlflow.resources | nindent 12 }}
@@ -75,12 +61,8 @@ spec:
           volumeMounts:
             - name: mlflow-artifacts
               mountPath: {{ .Values.mlflow.artifactRoot }}
-            - name: shared-libs
-              mountPath: /shared-libs
 
       volumes:
         - name: mlflow-artifacts
           persistentVolumeClaim:
             claimName: mlflow-artifacts
-        - name: shared-libs
-          emptyDir: {}

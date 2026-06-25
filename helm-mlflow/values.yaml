@@ -42,7 +42,8 @@ postgres:
 # MLflow Tracking Server
 # -----------------------------------------------------------------------
 mlflow:
-  image: ghcr.io/mlflow/mlflow:2.18.0
+  image: python:3.12-slim
+  version: "2.18.0"
   port: 5000
   artifactRoot: /mlflow-artifacts
 
@@ -56,15 +57,15 @@ mlflow:
       memory: "256Mi"
       cpu: "200m"
     limits:
-      memory: "512Mi"
+      memory: "1.5Gi"
       cpu: "500m"
 
   probes:
     readiness:
       path: /health
-      initialDelaySeconds: 10
+      initialDelaySeconds: 45
       periodSeconds: 10
     liveness:
       path: /health
-      initialDelaySeconds: 20
+      initialDelaySeconds: 60
       periodSeconds: 30
