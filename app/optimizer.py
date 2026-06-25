@@ -167,8 +167,8 @@ async def run_prompt_optimization(
         current_prompt = base_prompt.strip() if base_prompt.strip() else _load_current_prompt()
         result["base_prompt"] = current_prompt
 
-        # Step 2 — run DVC experiments against inference service
-        logger.info("Benchmarking candidate prompts via DVC experiments…")
+        # Step 2 — run MLflow experiments against inference service
+        logger.info("Benchmarking candidate prompts via MLflow experiments…")
         ranked = run_experiments(current_prompt)
         result["all_candidates"] = ranked
 

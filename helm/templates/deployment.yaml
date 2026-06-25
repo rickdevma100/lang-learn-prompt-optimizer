@@ -33,6 +33,8 @@ spec:
               value: {{ .Values.config.inferenceServiceUrl | quote }}
             - name: LOG_LEVEL
               value: {{ .Values.config.logLevel | quote }}
+            - name: MLFLOW_TRACKING_URI
+              value: {{ .Values.config.mlflowTrackingUri | quote }}
 
             # Email settings
             - name: ADMIN_EMAIL
@@ -75,9 +77,6 @@ spec:
             - name: optimizer-data
               mountPath: /app/metrics
               subPath: metrics
-            - name: optimizer-data
-              mountPath: /app/.dvc/tmp/exps
-              subPath: dvc-exps
           {{- end }}
 
       {{- if .Values.persistence.enabled }}

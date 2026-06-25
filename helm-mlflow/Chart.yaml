@@ -1,0 +1,10 @@
+apiVersion: v2
+name: mlflow-tracking
+description: MLflow Tracking Server with PostgreSQL backend for lang-learn prompt optimization
+version: 0.1.0
+appVersion: "2.18.0"
+type: application
+keywords:
+  - mlflow
+  - experiment-tracking
+  - lang-learn

@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-postgres-data
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "mlflow.labels" . | nindent 4 }}
+    {{- include "mlflow.postgres.selectorLabels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.postgres.persistence.accessMode }}
+  storageClassName: {{ .Values.postgres.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.postgres.persistence.size }}

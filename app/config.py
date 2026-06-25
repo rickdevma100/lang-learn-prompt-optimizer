@@ -23,6 +23,12 @@ class Config:
         "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local:80",
     )
 
+    # MLflow Tracking Server URI for experiment logging.
+    MLFLOW_TRACKING_URI: str = os.getenv(
+        "MLFLOW_TRACKING_URI",
+        "http://mlflow-tracking.lang-learn.svc.cluster.local:5000",
+    )
+
 
 # Global config instance
 settings = Config()

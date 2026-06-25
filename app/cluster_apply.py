@@ -42,6 +42,7 @@ INFERENCE_DEPLOYMENT_NAME = os.getenv(
 def _load_k8s_config():
     """Load Kubernetes client config (in-cluster or local kubeconfig)."""
     try:
+        # pyrefly: ignore [missing-import]
         from kubernetes import config
         try:
             config.load_incluster_config()

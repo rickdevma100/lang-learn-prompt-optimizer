@@ -1,15 +1,9 @@
-"""DVC evaluation script for prompt quality — run via `dvc exp run`.
+"""Prompt quality evaluation — scoring functions and inference client.
 
-This script is the entry point for the DVC pipeline stage `evaluate_prompt`.
-It reads candidate parameters from params.yaml, calls the inference service,
-computes quality metrics (reusing vocab.py for CEFR word lists), and writes
-the results to metrics/prompt_quality.json.
+Contains the text-analysis helpers and composite scoring formula used
+to evaluate prompt candidates. Called directly by experiment_runner.py.
 
-Usage (via DVC):
-    dvc repro evaluate_prompt
-    dvc exp run -S candidate.name=precise -S inference.temperature=0.4
-
-Usage (standalone):
+Standalone usage:
     python -m app.evaluate_prompts
 """
 from __future__ import annotations
@@ -22,24 +16,15 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
-import yaml
-
 from app.vocab import A1_WORDS, B2_WORDS
 
 # ---------------------------------------------------------------------------
 # Paths — relative to the optimizer project root
 # ---------------------------------------------------------------------------
 APP_ROOT = Path(os.getenv("APP_ROOT", Path(__file__).parent.parent))
-PARAMS_FILE = APP_ROOT / "params.yaml"
 PROMPTS_DIR = APP_ROOT / "prompts"
 METRICS_DIR = APP_ROOT / "metrics"
 CURRENT_PROMPT_FILE = PROMPTS_DIR / "scenario_dialogue.txt"
-
-
-def load_params() -> dict:
-    """Load params.yaml from the project root."""
-    with open(PARAMS_FILE, encoding="utf-8") as f:
-        return yaml.safe_load(f) or {}
 
 
 # ---------------------------------------------------------------------------
@@ -87,7 +72,7 @@ def call_inference_service(
 
 
 # ---------------------------------------------------------------------------
-# Text-analysis helpers — consistent with evaluate_prompts.py in lang-learn-mlops
+# Text-analysis helpers
 # ---------------------------------------------------------------------------
 
 def count_words(text: str) -> int:
@@ -165,53 +150,29 @@ def composite_score(metrics: dict) -> float:
 
 
 # ---------------------------------------------------------------------------
-# Main evaluation
+# Standalone entry point (for manual testing / debugging)
 # ---------------------------------------------------------------------------
 
-def evaluate() -> dict:
-    """Run prompt evaluation via the inference service and return metrics.
+def main() -> None:
+    """Standalone evaluation entry point for manual testing."""
+    from app.experiment_runner import INFERENCE_URL, DEFAULT_SCENARIOS
 
-    Reads parameters from params.yaml:
-      - inference.service_url, inference.max_tokens, inference.temperature
-      - evaluate.test_scenarios, evaluate.num_samples
-      - candidate.name, candidate.suffix
-    """
-    params = load_params()
-    inference_cfg = params.get("inference", {})
-    eval_cfg = params.get("evaluate", {})
-    candidate_cfg = params.get("candidate", {})
+    print("=" * 60)
+    print("Prompt Quality Evaluation")
+    print("=" * 60)
 
-    service_url = inference_cfg.get(
-        "service_url",
-        "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local/scenario_dialogue",
-    )
-    scenarios = eval_cfg.get("test_scenarios", ["ordering food at a restaurant"])
-    num_samples = eval_cfg.get("num_samples", 1)
-    max_tokens = inference_cfg.get("max_tokens", 512)
-    temperature = inference_cfg.get("temperature", 0.7)
+    service_url = INFERENCE_URL
+    scenarios = DEFAULT_SCENARIOS
 
-    candidate_name = candidate_cfg.get("name", "current")
-    candidate_suffix = candidate_cfg.get("suffix", "")
-
-    # Load the base prompt and append the candidate suffix
     if CURRENT_PROMPT_FILE.exists():
         base_prompt = CURRENT_PROMPT_FILE.read_text(encoding="utf-8").strip()
     else:
         base_prompt = ""
 
-    full_prompt = base_prompt
-    if candidate_suffix:
-        full_prompt = base_prompt.rstrip() + "\n" + candidate_suffix
-
-    print(f"Candidate: {candidate_name}")
     print(f"Inference service: {service_url}")
-    print(f"Scenarios: {len(scenarios)}, Samples/scenario: {num_samples}")
-    print(f"Temperature: {temperature}, Max tokens: {max_tokens}")
-    if candidate_suffix:
-        print(f"Suffix: {candidate_suffix[:80]}...")
+    print(f"Scenarios: {len(scenarios)}")
     print()
 
-    # Collect metrics across all scenarios
     all_word_counts: list[int] = []
     all_sentence_counts: list[int] = []
     all_a1_ratios: list[float] = []
@@ -221,41 +182,36 @@ def evaluate() -> dict:
     total_time = 0.0
 
     for scenario in scenarios:
-        for sample_idx in range(num_samples):
-            print(f"  Evaluating: '{scenario}' (sample {sample_idx + 1}/{num_samples})")
+        print(f"  Evaluating: '{scenario}'")
 
-            start = time.time()
-            output = call_inference_service(
-                service_url=service_url,
-                scenario=scenario,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
-            elapsed = time.time() - start
-            total_time += elapsed
+        start = time.time()
+        output = call_inference_service(
+            service_url=service_url,
+            scenario=scenario,
+        )
+        elapsed = time.time() - start
+        total_time += elapsed
 
-            print(f"    Generated {len(output)} chars in {elapsed:.1f}s")
+        print(f"    Generated {len(output)} chars in {elapsed:.1f}s")
 
-            # Compute metrics
-            wc = count_words(output)
-            sc = count_sentences(output)
-            vocab = compute_vocab_level(output)
-            turns = count_dialogue_turns(output)
-            german_ratio = count_german_chars(output)
+        wc = count_words(output)
+        sc = count_sentences(output)
+        vocab = compute_vocab_level(output)
+        turns = count_dialogue_turns(output)
+        german_ratio = count_german_chars(output)
 
-            all_word_counts.append(wc)
-            all_sentence_counts.append(sc)
-            all_a1_ratios.append(vocab["a1_ratio"])
-            all_b2_ratios.append(vocab["b2_ratio"])
-            all_dialogue_turns.append(turns)
-            all_german_ratios.append(german_ratio)
+        all_word_counts.append(wc)
+        all_sentence_counts.append(sc)
+        all_a1_ratios.append(vocab["a1_ratio"])
+        all_b2_ratios.append(vocab["b2_ratio"])
+        all_dialogue_turns.append(turns)
+        all_german_ratios.append(german_ratio)
 
     n = len(all_word_counts) or 1
 
     metrics = {
-        "candidate_name": candidate_name,
+        "candidate_name": "manual-eval",
         "scenarios_evaluated": len(scenarios),
-        "samples_per_scenario": num_samples,
         "total_generations": n,
         "avg_word_count": round(sum(all_word_counts) / n, 1),
         "avg_sentence_count": round(sum(all_sentence_counts) / n, 1),
@@ -267,21 +223,8 @@ def evaluate() -> dict:
         "total_time_s": round(total_time, 2),
     }
 
-    # Compute composite quality score
     metrics["quality_score"] = composite_score(metrics)
 
-    return metrics
-
-
-def main() -> None:
-    """Entry point for DVC pipeline stage."""
-    print("=" * 60)
-    print("DVC Stage: evaluate_prompt")
-    print("=" * 60)
-
-    metrics = evaluate()
-
-    # Write metrics
     METRICS_DIR.mkdir(parents=True, exist_ok=True)
     metrics_file = METRICS_DIR / "prompt_quality.json"
     with open(metrics_file, "w", encoding="utf-8") as f:

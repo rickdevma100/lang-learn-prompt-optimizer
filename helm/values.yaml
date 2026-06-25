@@ -21,6 +21,7 @@ config:
   minScoreImprovement: "0.02"
   inferenceServiceUrl: "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local/scenario_dialogue"
   logLevel: "INFO"
+  mlflowTrackingUri: "http://mlflow-tracking.lang-learn.svc.cluster.local:5000"
 
 # Email / SMTP settings
 email:

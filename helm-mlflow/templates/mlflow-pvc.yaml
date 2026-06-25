@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mlflow-artifacts
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "mlflow.labels" . | nindent 4 }}
+    {{- include "mlflow.server.selectorLabels" . | nindent 4 }}
+spec:
+  accessModes:
+    - {{ .Values.mlflow.persistence.accessMode }}
+  storageClassName: {{ .Values.mlflow.persistence.storageClassName }}
+  resources:
+    requests:
+      storage: {{ .Values.mlflow.persistence.size }}

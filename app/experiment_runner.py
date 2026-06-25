@@ -1,18 +1,18 @@
-"""Prompt experiment runner — drives DVC experiments from inside the pod.
+"""Prompt experiment runner — benchmarks candidates via MLflow.
 
-Runs `dvc exp run` for each candidate prompt variation, reads the resulting
-metrics from metrics/prompt_quality.json, and ranks candidates by quality_score.
+Runs each candidate prompt variation, calls the inference service to generate
+text, computes quality metrics, logs everything to MLflow, and ranks candidates
+by quality_score.
 
-All scoring logic lives in app/evaluate_prompts.py (the DVC pipeline stage).
+All scoring logic lives in app/evaluate_prompts.py.
 """
 from __future__ import annotations
 
-import json
 import logging
 import os
 import random
-import subprocess
 import time
+from datetime import datetime, timezone
 from pathlib import Path
 
 logger = logging.getLogger("prompt-optimizer.runner")
@@ -30,8 +30,21 @@ INFERENCE_URL = os.getenv(
     "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local/scenario_dialogue",
 )
 
+# MLflow tracking URI
+MLFLOW_TRACKING_URI = os.getenv(
+    "MLFLOW_TRACKING_URI",
+    "http://mlflow-tracking.lang-learn.svc.cluster.local:5000",
+)
+
+# Default test scenarios (used when evaluating each candidate)
+DEFAULT_SCENARIOS = [
+    "ordering food at a restaurant",
+    "asking for directions at the train station",
+    "shopping for clothes",
+]
+
 # ---------------------------------------------------------------------------
-# Candidate prompt variations (driven via DVC params)
+# Candidate prompt variations
 # ---------------------------------------------------------------------------
 CANDIDATES = [
     {
@@ -121,82 +134,89 @@ CANDIDATES = [
 
 
 # ---------------------------------------------------------------------------
-# DVC experiment runner
+# Direct evaluation (replaces DVC subprocess)
 # ---------------------------------------------------------------------------
 
-def _run_dvc_experiment(candidate: dict) -> dict | None:
-    """Run a single DVC experiment for the given candidate.
+def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
+    """Evaluate a single candidate by calling the inference service directly.
 
-    Executes:
-        dvc exp run -S candidate.name={name}
-                    -S candidate.suffix="{suffix}"
-                    -S inference.temperature={temp}
-                    -S inference.max_tokens={tokens}
+    Constructs the full prompt (base + suffix), calls the inference service
+    for each test scenario, and computes quality metrics.
 
-    Returns the parsed metrics dict, or None if the experiment failed.
+    Returns a metrics dict compatible with composite_score().
     """
-    name = candidate["name"]
+    from app.evaluate_prompts import (
+        call_inference_service,
+        composite_score,
+        compute_vocab_level,
+        count_dialogue_turns,
+        count_german_chars,
+        count_sentences,
+        count_words,
+    )
+
     suffix = candidate["suffix"]
     temperature = candidate["temperature"]
     max_tokens = candidate["max_tokens"]
 
-    # DVC uses Hydra override grammar — string values with special chars
-    # (periods, commas, etc.) must be single-quoted.  Strip the leading
-    # newline that some suffixes contain since it breaks the Hydra lexer.
-    escaped_suffix = suffix.lstrip("\n")
+    full_prompt = base_prompt
+    if suffix:
+        full_prompt = base_prompt.rstrip() + "\n" + suffix.lstrip("\n")
 
-    cmd = [
-        "dvc", "exp", "run", "--force",
-        "-S", f"candidate.name={name}",
-        "-S", f"candidate.suffix='{escaped_suffix}'",
-        "-S", f"inference.temperature={temperature}",
-        "-S", f"inference.max_tokens={max_tokens}",
-    ]
+    scenarios = DEFAULT_SCENARIOS
 
-    logger.info(f"Running DVC experiment: {name} (temp={temperature}, tokens={max_tokens})")
-    logger.debug(f"Command: {' '.join(cmd)}")
+    all_word_counts: list[int] = []
+    all_sentence_counts: list[int] = []
+    all_a1_ratios: list[float] = []
+    all_b2_ratios: list[float] = []
+    all_dialogue_turns: list[int] = []
+    all_german_ratios: list[float] = []
+    total_time = 0.0
 
-    try:
-        result = subprocess.run(
-            cmd,
-            cwd=str(APP_ROOT),
-            capture_output=True,
-            text=True,
-            timeout=600,  # 10 min max per experiment
+    for scenario in scenarios:
+        logger.debug(f"  Evaluating: '{scenario}' for candidate '{candidate['name']}'")
+
+        start = time.time()
+        output = call_inference_service(
+            service_url=INFERENCE_URL,
+            scenario=scenario,
+            max_tokens=max_tokens,
+            temperature=temperature,
         )
+        elapsed = time.time() - start
+        total_time += elapsed
 
-        if result.returncode != 0:
-            logger.warning(
-                f"DVC experiment '{name}' failed (exit={result.returncode}).\n"
-                f"  stdout: {result.stdout[-500:] if result.stdout else '(empty)'}\n"
-                f"  stderr: {result.stderr[-500:] if result.stderr else '(empty)'}"
-            )
-            return None
+        wc = count_words(output)
+        sc = count_sentences(output)
+        vocab = compute_vocab_level(output)
+        turns = count_dialogue_turns(output)
+        german_ratio = count_german_chars(output)
 
-        logger.info(f"DVC experiment '{name}' completed successfully.")
+        all_word_counts.append(wc)
+        all_sentence_counts.append(sc)
+        all_a1_ratios.append(vocab["a1_ratio"])
+        all_b2_ratios.append(vocab["b2_ratio"])
+        all_dialogue_turns.append(turns)
+        all_german_ratios.append(german_ratio)
 
-    except subprocess.TimeoutExpired:
-        logger.warning(f"DVC experiment '{name}' timed out after 600s.")
-        return None
-    except FileNotFoundError:
-        logger.error("DVC binary not found. Is DVC installed?")
-        return None
+    n = len(all_word_counts) or 1
 
-    return _read_experiment_metrics()
+    metrics = {
+        "candidate_name": candidate["name"],
+        "scenarios_evaluated": len(scenarios),
+        "total_generations": n,
+        "avg_word_count": round(sum(all_word_counts) / n, 1),
+        "avg_sentence_count": round(sum(all_sentence_counts) / n, 1),
+        "avg_dialogue_turns": round(sum(all_dialogue_turns) / n, 1),
+        "avg_german_ratio": round(sum(all_german_ratios) / n, 3),
+        "a1_ratio": round(sum(all_a1_ratios) / n, 3),
+        "b2_ratio": round(sum(all_b2_ratios) / n, 3),
+        "avg_generation_time_s": round(total_time / n, 2),
+        "total_time_s": round(total_time, 2),
+    }
 
-
-def _read_experiment_metrics() -> dict | None:
-    """Read the metrics/prompt_quality.json file written by the DVC stage."""
-    if not METRICS_FILE.exists():
-        logger.warning(f"Metrics file not found: {METRICS_FILE}")
-        return None
-
-    try:
-        with open(METRICS_FILE, encoding="utf-8") as f:
-            return json.load(f)
-    except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Failed to read metrics file: {e}")
-        return None
+    metrics["quality_score"] = composite_score(metrics)
+    return metrics
 
 
 def _simulate_metrics(name: str) -> dict:
@@ -217,7 +237,7 @@ def _simulate_metrics(name: str) -> dict:
 
 
 def _compute_quality_score(metrics: dict) -> float:
-    """Compute composite quality score — same formula as evaluate_prompts.py."""
+    """Compute composite quality score — delegates to evaluate_prompts."""
     from app.evaluate_prompts import composite_score
     return composite_score(metrics)
 
@@ -227,53 +247,111 @@ def _compute_quality_score(metrics: dict) -> float:
 # ---------------------------------------------------------------------------
 
 def run_experiments(base_prompt: str) -> list[dict]:
-    """Benchmark all candidates via DVC experiments and rank them.
+    """Benchmark all candidates and rank them, logging to MLflow.
 
     For each candidate:
-      1. Run `dvc exp run` with the candidate's parameters
-      2. Read the resulting metrics from metrics/prompt_quality.json
-      3. Fall back to simulated metrics if the DVC run fails
+      1. Evaluate directly against the inference service (no subprocess)
+      2. Log parameters, metrics, and prompt text to MLflow
+      3. Fall back to simulated metrics if inference is unreachable
 
     Returns a list of result dicts sorted best-first by quality_score.
     Each dict includes: name, description, suffix, metrics, score, latency_s, simulated.
     """
+    # Import mlflow lazily so tests can mock or skip it
+    try:
+        import mlflow
+        mlflow_available = True
+    except ImportError:
+        logger.warning("mlflow package not installed — experiments will not be tracked.")
+        mlflow_available = False
+
+    if mlflow_available:
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        mlflow.set_experiment("prompt-optimization")
+
     results = []
+    run_name = f"optimization-{datetime.now(timezone.utc):%Y%m%d-%H%M%S}"
 
-    for cand in CANDIDATES:
-        logger.info(f"Benchmarking candidate: {cand['name']}")
-        t0 = time.time()
-        simulated = False
+    # Context manager for the parent MLflow run (the full optimization cycle)
+    parent_ctx = (
+        mlflow.start_run(run_name=run_name) if mlflow_available else _noop_context()
+    )
 
-        metrics = _run_dvc_experiment(cand)
+    with parent_ctx:
+        if mlflow_available:
+            mlflow.log_param("num_candidates", len(CANDIDATES))
+            mlflow.log_param("inference_url", INFERENCE_URL)
+            mlflow.log_param("scenarios", ", ".join(DEFAULT_SCENARIOS))
 
-        if metrics is None:
-            # DVC experiment failed — use deterministic simulation
-            logger.warning(
-                f"DVC experiment failed for candidate '{cand['name']}'. "
-                "Using simulated metrics."
-            )
-            metrics = _simulate_metrics(cand["name"])
-            simulated = True
+        for cand in CANDIDATES:
+            logger.info(f"Benchmarking candidate: {cand['name']}")
+            t0 = time.time()
+            simulated = False
 
-        score = metrics.get("quality_score") or _compute_quality_score(metrics)
+            try:
+                metrics = _evaluate_candidate(cand, base_prompt)
+            except Exception as e:
+                logger.warning(
+                    f"Evaluation failed for candidate '{cand['name']}': {e}. "
+                    "Using simulated metrics."
+                )
+                metrics = _simulate_metrics(cand["name"])
+                simulated = True
 
-        results.append({
-            "name":        cand["name"],
-            "description": cand["description"],
-            "suffix":      cand["suffix"],
-            "metrics":     metrics,
-            "score":       score,
-            "latency_s":   metrics.get("avg_generation_time_s", 0.0),
-            "elapsed_s":   round(time.time() - t0, 2),
-            "simulated":   simulated,
-        })
+            score = metrics.get("quality_score") or _compute_quality_score(metrics)
+
+            # Log to MLflow as a nested child run
+            if mlflow_available:
+                with mlflow.start_run(run_name=cand["name"], nested=True):
+                    mlflow.log_params({
+                        "candidate_name": cand["name"],
+                        "description": cand["description"],
+                        "temperature": cand["temperature"],
+                        "max_tokens": cand["max_tokens"],
+                        "suffix": cand["suffix"][:250] if cand["suffix"] else "(none)",
+                        "simulated": str(simulated),
+                    })
+                    mlflow.log_metrics({
+                        "quality_score": score,
+                        "a1_ratio": metrics.get("a1_ratio", 0.0),
+                        "b2_ratio": metrics.get("b2_ratio", 0.0),
+                        "avg_german_ratio": metrics.get("avg_german_ratio", 0.0),
+                        "avg_dialogue_turns": metrics.get("avg_dialogue_turns", 0.0),
+                        "avg_generation_time_s": metrics.get("avg_generation_time_s", 0.0),
+                        "avg_word_count": metrics.get("avg_word_count", 0.0),
+                    })
+                    # Log the full prompt as a text artifact
+                    prompt_text = base_prompt
+                    if cand["suffix"]:
+                        prompt_text = base_prompt.rstrip() + "\n" + cand["suffix"]
+                    mlflow.log_text(prompt_text, "prompt.txt")
+
+            results.append({
+                "name":        cand["name"],
+                "description": cand["description"],
+                "suffix":      cand["suffix"],
+                "metrics":     metrics,
+                "score":       score,
+                "latency_s":   metrics.get("avg_generation_time_s", 0.0),
+                "elapsed_s":   round(time.time() - t0, 2),
+                "simulated":   simulated,
+            })
 
     results.sort(key=lambda r: r["score"], reverse=True)
     logger.info(f"Ranking: {[(r['name'], r['score']) for r in results]}")
 
-    # Persist metrics of the winner for audit
+    # Persist metrics of the winner for audit (same as before)
+    import json
     METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(METRICS_FILE, "w", encoding="utf-8") as f:
         json.dump(results[0]["metrics"], f, indent=2)
 
     return results
+
+
+class _noop_context:
+    """No-op context manager used when MLflow is not available."""
+    def __enter__(self):
+        return self
+    def __exit__(self, *args):
+        pass

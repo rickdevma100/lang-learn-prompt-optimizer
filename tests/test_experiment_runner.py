@@ -1,4 +1,4 @@
-"""Tests for app.experiment_runner — DVC experiment orchestration and metrics."""
+"""Tests for app.experiment_runner — MLflow experiment orchestration and metrics."""
 from __future__ import annotations
 
 import json
@@ -10,7 +10,6 @@ import pytest
 from app.experiment_runner import (
     CANDIDATES,
     _compute_quality_score,
-    _read_experiment_metrics,
     _simulate_metrics,
 )
 
@@ -66,33 +65,6 @@ class TestSimulateMetrics:
         assert m["candidate_name"] == "extended"
 
 
-# ─── _read_experiment_metrics ────────────────────────────────────────────────
-
-class TestReadExperimentMetrics:
-    def test_reads_valid_json(self, tmp_path):
-        metrics = {"quality_score": 0.85, "a1_ratio": 0.4}
-        metrics_file = tmp_path / "prompt_quality.json"
-        metrics_file.write_text(json.dumps(metrics))
-
-        with patch("app.experiment_runner.METRICS_FILE", metrics_file):
-            result = _read_experiment_metrics()
-
-        assert result == metrics
-
-    def test_returns_none_for_missing_file(self, tmp_path):
-        with patch("app.experiment_runner.METRICS_FILE", tmp_path / "nonexistent.json"):
-            result = _read_experiment_metrics()
-        assert result is None
-
-    def test_returns_none_for_invalid_json(self, tmp_path):
-        bad_file = tmp_path / "bad.json"
-        bad_file.write_text("not valid json {{{")
-
-        with patch("app.experiment_runner.METRICS_FILE", bad_file):
-            result = _read_experiment_metrics()
-        assert result is None
-
-
 # ─── _compute_quality_score ──────────────────────────────────────────────────
 
 class TestComputeQualityScore:
@@ -107,3 +79,61 @@ class TestComputeQualityScore:
         from app.evaluate_prompts import composite_score
         expected = composite_score(metrics)
         assert _compute_quality_score(metrics) == expected
+
+
+# ─── run_experiments (with MLflow mocked) ────────────────────────────────────
+
+class TestRunExperiments:
+    @patch("app.experiment_runner._evaluate_candidate")
+    def test_returns_ranked_results(self, mock_eval):
+        """run_experiments returns candidates sorted by score, best first."""
+        # Make _evaluate_candidate return different scores per candidate
+        def side_effect(cand, base):
+            scores = {"current": 0.5, "precise": 0.8, "natural": 0.6}
+            name = cand["name"]
+            return {
+                "candidate_name": name,
+                "quality_score": scores.get(name, 0.4),
+                "a1_ratio": 0.35,
+                "b2_ratio": 0.02,
+                "avg_german_ratio": 0.7,
+                "avg_dialogue_turns": 10,
+                "avg_generation_time_s": 5.0,
+                "avg_word_count": 200,
+                "avg_sentence_count": 20,
+                "total_generations": 3,
+                "scenarios_evaluated": 3,
+                "total_time_s": 15.0,
+            }
+
+        mock_eval.side_effect = side_effect
+
+        # Mock mlflow so we don't need a tracking server
+        mock_mlflow = MagicMock()
+        mock_mlflow.start_run = MagicMock(return_value=MagicMock(
+            __enter__=MagicMock(return_value=MagicMock()),
+            __exit__=MagicMock(return_value=False),
+        ))
+
+        with patch.dict("sys.modules", {"mlflow": mock_mlflow}), \
+             patch("app.experiment_runner.METRICS_FILE", Path("/tmp/test_metrics.json")):
+            from app.experiment_runner import run_experiments
+            results = run_experiments("test prompt")
+
+        assert len(results) == len(CANDIDATES)
+        # Results should be sorted descending by score
+        scores = [r["score"] for r in results]
+        assert scores == sorted(scores, reverse=True)
+
+    @patch("app.experiment_runner._evaluate_candidate")
+    def test_falls_back_to_simulation_on_error(self, mock_eval):
+        """When evaluation fails, simulated metrics are used."""
+        mock_eval.side_effect = ConnectionError("service down")
+
+        with patch.dict("sys.modules", {"mlflow": MagicMock()}), \
+             patch("app.experiment_runner.METRICS_FILE", Path("/tmp/test_metrics.json")):
+            from app.experiment_runner import run_experiments
+            results = run_experiments("test prompt")
+
+        assert all(r["simulated"] for r in results)
+        assert len(results) == len(CANDIDATES)
