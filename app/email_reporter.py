@@ -110,9 +110,7 @@ def _build_html_report(
   {_cluster_status_html(cluster_applied)}
 
   <h2>📋 Recommendation</h2>
-  <p><strong>Prompt Updated Successfully</strong> — The new prompt has been written to
-  <code>prompts/scenario_dialogue.txt</code> in the optimizer service. The previous prompt has been
-  archived.</p>
+  {_recommendation_html(winner['name'] != 'current' and old_prompt != new_prompt)}
 
 
   <hr/>
@@ -120,6 +118,20 @@ def _build_html_report(
 </body>
 </html>
 """
+
+
+def _recommendation_html(prompt_updated: bool) -> str:
+    """Generate HTML snippet for the recommendation status."""
+    if prompt_updated:
+        return (
+            '<p><strong>Prompt Updated Successfully</strong> — The new prompt has been written to '
+            '<code>prompts/scenario_dialogue.txt</code> in the optimizer service. The previous prompt has been '
+            'archived.</p>'
+        )
+    return (
+        '<p><strong>No Update Performed</strong> — The current prompt is already optimal (none of the candidate '
+        'variations improved the baseline by the minimum threshold of 0.02).</p>'
+    )
 
 
 def _cluster_status_html(cluster_applied: bool) -> str:

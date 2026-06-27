@@ -37,17 +37,26 @@ def call_inference_service(
     max_tokens: int = 512,
     temperature: float = 0.7,
     timeout: int = 300,
+    prompt_template: str = "",
 ) -> str:
     """Call the inference service via HTTP and return the response text.
 
+    If `prompt_template` is provided, the inference service will use it
+    instead of its default prompt loaded from the ConfigMap.  The template
+    must contain a ``{scenario}`` placeholder.
+
     Raises ConnectionError if the service is unreachable.
     """
-    payload = json.dumps({
+    body: dict = {
         "scenario": scenario,
         "max_tokens": max_tokens,
         "temperature": temperature,
         "bypass_cache": True,
-    }).encode("utf-8")
+    }
+    if prompt_template:
+        body["prompt_template"] = prompt_template
+
+    payload = json.dumps(body).encode("utf-8")
 
     req = urllib.request.Request(
         service_url,
@@ -58,17 +67,17 @@ def call_inference_service(
 
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
-            body = json.loads(resp.read().decode("utf-8"))
+            resp_body = json.loads(resp.read().decode("utf-8"))
     except urllib.error.URLError as e:
         raise ConnectionError(
             f"Cannot reach inference service at {service_url}. "
             f"Is the service running?\n  Error: {e}"
         ) from e
 
-    if "error" in body:
-        raise RuntimeError(f"Inference service error: {body['error']}")
+    if "error" in resp_body:
+        raise RuntimeError(f"Inference service error: {resp_body['error']}")
 
-    return body.get("response", "")
+    return resp_body.get("response", "")
 
 
 # ---------------------------------------------------------------------------

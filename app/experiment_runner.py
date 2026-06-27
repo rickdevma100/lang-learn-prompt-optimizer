@@ -47,6 +47,7 @@ DEFAULT_SCENARIOS = [
 # Candidate prompt variations
 # ---------------------------------------------------------------------------
 CANDIDATES = [
+    # -- Baseline (always required) --
     {
         "name":        "current",
         "description": "Existing prompt — no changes",
@@ -54,81 +55,108 @@ CANDIDATES = [
         "temperature": 0.7,
         "max_tokens":  512,
     },
+
+    # -- Target: A1 vocabulary ratio (40% of score) --
     {
-        "name":        "precise",
-        "description": "Low temperature — precise, grammatically exact German",
+        "name":        "a1_strict_vocab",
+        "description": "Forces strictly A1-level vocabulary",
         "suffix":      (
-            "\nSystem Rule: Use precise, controlled language. "
-            "Prefer shorter, grammatically exact sentences. "
-            "Avoid complex subordinate clauses."
-        ),
-        "temperature": 0.4,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "natural",
-        "description": "Higher temperature — natural conversational flow",
-        "suffix":      (
-            "\nSystem Rule: Prioritise natural conversational flow. "
-            "Use colloquial but grammatically correct A2 German. "
-            "Vary sentence length naturally."
-        ),
-        "temperature": 0.9,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "extended",
-        "description": "Extended dialogue — more exchanges per scenario",
-        "suffix":      (
-            "\nSystem Rule: Extend the dialogue to at least 20 exchanges. "
-            "Explore the scenario fully. Keep vocabulary A1-A2 throughout."
-        ),
-        "temperature": 0.7,
-        "max_tokens":  1024,
-    },
-    {
-        "name":        "structured",
-        "description": "Numbered turns with clear speaker labels",
-        "suffix":      (
-            "\nSystem Rule: Number each turn sequentially. "
-            "Format each turn as '1. Person A:' and '2. Person B:' etc. "
-            "Include exactly one sentence per turn to keep the dialogue clear and scannable."
+            "\nSystem Rule: Use ONLY the most basic A1-level German vocabulary. "
+            "Stick to the 500 most common German words. "
+            "Replace any complex word with a simpler synonym."
         ),
         "temperature": 0.5,
         "max_tokens":  512,
     },
     {
-        "name":        "immersive",
-        "description": "German-only output — no English translations",
+        "name":        "a1_word_repetition",
+        "description": "Reinforces A1 words through natural repetition",
         "suffix":      (
-            "\nSystem Rule: Output ONLY German. Do not include any English text at all. "
-            "Do not include 'Translation:' lines. The learner should immerse fully in German. "
-            "Use only A1-A2 vocabulary so the dialogue is understandable without translation."
+            "\nSystem Rule: Naturally repeat key A1 vocabulary across turns. "
+            "Use common words like 'bitte', 'danke', 'ja', 'nein', 'gut', 'gern'. "
+            "Every sentence must use at least one of these high-frequency words."
         ),
-        "temperature": 0.8,
+        "temperature": 0.6,
         "max_tokens":  512,
     },
+
+    # -- Target: German language ratio (25% of score) --
     {
-        "name":        "situational",
-        "description": "Rich context — emotions, props, and stage directions",
+        "name":        "pure_german",
+        "description": "Eliminates all non-German content",
         "suffix":      (
-            "\nSystem Rule: Add brief context notes in parentheses before each turn, "
-            "describing the speakers mood or action, e.g. '(lächelt)' or '(zeigt auf die Karte)'. "
-            "Keep notes in simple German. This helps learners understand conversational nuance."
+            "\nSystem Rule: Output must be 100% German with zero English. "
+            "Do not use English words, labels, or annotations. "
+            "Even filler words must be German ('ähm', 'also', 'na ja')."
+        ),
+        "temperature": 0.7,
+        "max_tokens":  512,
+    },
+
+    # -- Target: Dialogue turns (15% of score, capped at 15) --
+    {
+        "name":        "high_turn_density",
+        "description": "Maximizes dialogue turns with short exchanges",
+        "suffix":      (
+            "\nSystem Rule: Generate at least 20 dialogue turns per person. "
+            "Keep each turn to one short sentence (5-8 words maximum). "
+            "Use rapid question-and-answer exchanges."
         ),
         "temperature": 0.7,
         "max_tokens":  768,
     },
     {
-        "name":        "balanced",
-        "description": "Mid-range temperature with inline vocabulary notes",
+        "name":        "micro_turns",
+        "description": "Ultra-short turns for maximum turn count",
         "suffix":      (
-            "\nSystem Rule: After every 4th exchange, insert a short vocabulary note line "
-            "starting with 'Vokabeln:' listing 2-3 key words from the preceding turns with "
-            "their English meanings. Keep the main dialogue in A1-A2 German with translations."
+            "\nSystem Rule: Each turn must be exactly one short sentence. "
+            "Never combine two thoughts in one turn. "
+            "Generate at least 30 total sentences."
+        ),
+        "temperature": 0.8,
+        "max_tokens":  768,
+    },
+
+    # -- Target: Reduce B2 penalty (-10% of score) --
+    {
+        "name":        "b2_eliminator",
+        "description": "Explicitly avoids B2-level vocabulary",
+        "suffix":      (
+            "\nSystem Rule: Avoid all advanced German vocabulary. "
+            "Never use words like 'Gelegenheit', 'Voraussetzung', "
+            "'beeindruckend', 'Zusammenhang', 'selbstverständlich'. "
+            "If unsure about a word's level, use a simpler alternative."
         ),
         "temperature": 0.6,
+        "max_tokens":  512,
+    },
+
+    # -- Combined: A1 vocab + turn density + German purity --
+    {
+        "name":        "optimized_blend",
+        "description": "Balanced approach targeting all scoring dimensions",
+        "suffix":      (
+            "\nSystem Rule: Follow these rules strictly: "
+            "1) Use only basic A1 vocabulary (der, die, das, haben, sein, gehen, machen). "
+            "2) Keep each turn to one short sentence. "
+            "3) Generate at least 20 turns per person. "
+            "4) Write 100% German with no English at all."
+        ),
+        "temperature": 0.65,
         "max_tokens":  768,
+    },
+
+    # -- Target: Latency (10% of score) + structure --
+    {
+        "name":        "concise_fast",
+        "description": "Optimized for speed with concise output",
+        "suffix":      (
+            "\nSystem Rule: Be concise. Each turn is exactly one short sentence. "
+            "No filler text, stage directions, or explanations. "
+            "Start immediately with Person A."
+        ),
+        "temperature": 0.5,
+        "max_tokens":  384,
     },
 ]
 
@@ -182,6 +210,7 @@ def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
             scenario=scenario,
             max_tokens=max_tokens,
             temperature=temperature,
+            prompt_template=full_prompt,
         )
         elapsed = time.time() - start
         total_time += elapsed
@@ -259,6 +288,7 @@ def run_experiments(base_prompt: str) -> list[dict]:
     """
     # Import mlflow lazily so tests can mock or skip it
     try:
+        # pyrefly: ignore [missing-import]
         import mlflow
         mlflow_available = True
     except ImportError:
