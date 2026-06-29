@@ -32,7 +32,7 @@ CURRENT_PROMPT_FILE = PROMPTS_DIR / "scenario_dialogue.txt"
 ARCHIVE_DIR         = PROMPTS_DIR / "archive"
 
 # Only update the prompt if the winner beats the current by this margin
-MIN_IMPROVEMENT = float(os.getenv("MIN_SCORE_IMPROVEMENT", "0.02"))
+MIN_IMPROVEMENT = float(os.getenv("MIN_SCORE_IMPROVEMENT", "0.005"))
 
 
 # ---------------------------------------------------------------------------

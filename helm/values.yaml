@@ -18,7 +18,7 @@ service:
 # App-level configuration (passed as env vars)
 config:
   appRoot: "/app"
-  minScoreImprovement: "0.02"
+  minScoreImprovement: "0.005"
   inferenceServiceUrl: "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local/scenario_dialogue"
   logLevel: "INFO"
   mlflowTrackingUri: "http://mlflow-tracking.lang-learn.svc.cluster.local:5000"
