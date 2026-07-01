@@ -86,6 +86,47 @@ def _archive_and_save(new_prompt: str) -> None:
         raise
 
 
+def _validate_prompt(prompt: str) -> tuple[bool, str]:
+    """Validate that a rewritten prompt preserves required format constraints.
+
+    Returns (is_valid, reason). A prompt is invalid if:
+    - It no longer instructs the LLM to include English translations
+    - It affirmatively instructs the LLM to number turns (causes '1. Person A:' output)
+      Note: "Do NOT number the turns" is fine — we only flag affirmative numbering instructions.
+    """
+    import re as _re
+    lower = prompt.lower()
+
+    # Must still require English translations
+    if "translation" not in lower and "english translation" not in lower:
+        return False, "rewritten prompt lost 'Translation:' instruction — would remove English from output"
+
+    # Check for explicit numbered-format instructions like "1. Person A:" / "2. Person B:"
+    if _re.search(r"\b1\.\s+person\s+a\b", lower) or _re.search(r"\b2\.\s+person\s+b\b", lower):
+        return False, "rewritten prompt contains '1. Person A:' / '2. Person B:' turn numbering"
+
+    if _re.search(r"format\s+(?:each\s+)?turn\s+as\s+['\"]?1\.", lower):
+        return False, "rewritten prompt instructs numbering turns with '1. Person A:' format"
+
+    # Check "number each/the turns" — only flag if NOT preceded by a negation word
+    # We do this by checking every occurrence of "number" and seeing if it is negated
+    for m in _re.finditer(r"\bnumber\s+(?:each\s+)?turns?\b", lower):
+        # Look at the 20 chars before the match for negation words
+        start = max(0, m.start() - 20)
+        context = lower[start:m.start()]
+        if not _re.search(r"\b(?:not|don't|never|no)\b", context):
+            return False, "rewritten prompt affirmatively instructs numbering of turns"
+
+    # Check "sequentially" — only flag if describing turn format, not negated
+    for m in _re.finditer(r"\bsequentially\b", lower):
+        start = max(0, m.start() - 20)
+        context = lower[start:m.start()]
+        if not _re.search(r"\b(?:not|don't|never|no)\b", context):
+            return False, "rewritten prompt instructs sequential turn numbering"
+
+    return True, "ok"
+
+
 def _build_new_prompt(base: str, winner: dict) -> str:
     """Rewrite prompt by calling the BentoML rewrite_prompt API, with fallback to simple append."""
     suffix = winner.get("suffix", "").strip()
@@ -111,8 +152,17 @@ def _build_new_prompt(base: str, winner: dict) -> str:
     result = post_json(rewrite_url, payload, timeout=120)
     if result and isinstance(result, dict) and "prompt" in result:
         new_prompt = result["prompt"]
-        logger.info("Successfully generated cohesive prompt via BentoML rewrite endpoint.")
-        return new_prompt
+
+        # Validate the LLM-rewritten prompt preserves required format
+        is_valid, reason = _validate_prompt(new_prompt)
+        if is_valid:
+            logger.info("Successfully generated cohesive prompt via BentoML rewrite endpoint.")
+            return new_prompt
+        else:
+            logger.warning(
+                f"LLM-rewritten prompt failed validation ({reason}). "
+                "Falling back to safe suffix append."
+            )
 
     logger.info("Falling back to simple concatenation for prompt update.")
     return base.rstrip() + "\n" + suffix

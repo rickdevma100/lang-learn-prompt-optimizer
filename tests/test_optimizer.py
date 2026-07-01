@@ -98,11 +98,18 @@ class TestBuildNewPrompt:
         result = _build_new_prompt("base prompt", {})
         assert result == "base prompt"
 
-    @patch("app.utils.post_json", return_value={"prompt": "LLM-rewritten prompt"})
+    @patch("app.utils.post_json", return_value={
+        "prompt": (
+            "Generate a natural German conversation including their English translations.\n"
+            "- Write the German sentence first, then a Translation: line.\n"
+            "- Do NOT number the turns.\n"
+            "{scenario}\nPerson A:\n"
+        )
+    })
     def test_uses_llm_rewrite_when_available(self, mock_post):
         with patch("app.experiment_runner.INFERENCE_URL", "http://example.com/scenario_dialogue"):
             result = _build_new_prompt("base", {"suffix": "add more detail"})
-        assert result == "LLM-rewritten prompt"
+        assert "Translation" in result
         mock_post.assert_called_once()
 
     @patch("app.utils.post_json", return_value=None)

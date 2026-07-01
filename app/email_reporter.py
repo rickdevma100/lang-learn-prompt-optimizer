@@ -122,6 +122,7 @@ def _build_html_report(
 
 def _recommendation_html(prompt_updated: bool) -> str:
     """Generate HTML snippet for the recommendation status."""
+    from app.optimizer import MIN_IMPROVEMENT
     if prompt_updated:
         return (
             '<p><strong>Prompt Updated Successfully</strong> — The new prompt has been written to '
@@ -129,8 +130,8 @@ def _recommendation_html(prompt_updated: bool) -> str:
             'archived.</p>'
         )
     return (
-        '<p><strong>No Update Performed</strong> — The current prompt is already optimal (none of the candidate '
-        'variations improved the baseline by the minimum threshold of 0.02).</p>'
+        f'<p><strong>No Update Performed</strong> — The current prompt is already optimal (none of the candidate '
+        f'variations improved the baseline by the minimum threshold of {MIN_IMPROVEMENT}).</p>'
     )
 
 

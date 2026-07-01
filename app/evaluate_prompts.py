@@ -131,29 +131,29 @@ def count_dialogue_turns(text: str) -> int:
 def composite_score(metrics: dict) -> float:
     """Compute a 0-1 quality score from text metrics.
 
-    Weights:
-      40% A1 vocabulary (scaled so 45% A1 ratio = perfect score)
-      25% German language ratio
-      15% Dialogue turns (capped at 15)
-      10% Latency (faster = better, penalty above 60s)
-     -10% B2 vocabulary (penalty — too advanced for A1-A2 learners)
+    IMPORTANT: This formula MUST match compute_cefr_score() in
+    inference/src/metrics.py so the optimizer targets the same
+    metric that Prometheus monitors.
+
+    Weights (for A1/A2 targets):
+      40%  A1 vocabulary ratio (scaled so 45% A1 ratio = perfect)
+      20%  B2 penalty (inverted: 1 - b2_ratio)
+      20%  German language content ratio
+      20%  Dialogue turns (capped at 10)
     """
     a1 = float(metrics.get("a1_ratio", 0.3))
     german = float(metrics.get("avg_german_ratio", 0.5))
-    turns = min(float(metrics.get("avg_dialogue_turns", 5)) / 15.0, 1.0)
+    turns = min(float(metrics.get("avg_dialogue_turns", 5)) / 10.0, 1.0)
     b2 = float(metrics.get("b2_ratio", 0.0))
-    latency = float(metrics.get("avg_generation_time_s", 5.0))
-    lat_ok = max(0.0, 1.0 - latency / 60.0)
 
     # Scale A1 ratio so that 45% is a perfect vocabulary score
     a1_scaled = min(a1 / 0.45, 1.0)
 
     return round(
         0.40 * a1_scaled
-        + 0.25 * german
-        + 0.15 * turns
-        + 0.10 * lat_ok
-        - 0.10 * b2,
+        + 0.20 * (1.0 - b2)
+        + 0.20 * german
+        + 0.20 * turns,
         4,
     )
 
