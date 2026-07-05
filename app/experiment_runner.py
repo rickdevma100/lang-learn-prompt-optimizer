@@ -80,14 +80,15 @@ CANDIDATES = [
         "max_tokens":  512,
     },
 
-    # -- Target: German language ratio (25% of score) --
+    # -- Target: German language ratio (20% of score) --
     {
-        "name":        "pure_german",
-        "description": "Eliminates all non-German content",
+        "name":        "rich_german",
+        "description": "Maximises German-specific characters and vocabulary",
         "suffix":      (
-            "\nSystem Rule: Output must be 100% German with zero English. "
-            "Do not use English words, labels, or annotations. "
-            "Even filler words must be German ('ähm', 'also', 'na ja')."
+            "\nSystem Rule: The German dialogue lines must be rich in German-specific "
+            "characters (ä, ö, ü, ß) and idiomatic expressions. "
+            "Use German filler words like 'ähm', 'also', 'na ja'. "
+            "Always keep the Translation: lines in English after each German sentence."
         ),
         "temperature": 0.7,
         "max_tokens":  512,
@@ -131,7 +132,7 @@ CANDIDATES = [
         "max_tokens":  512,
     },
 
-    # -- Combined: A1 vocab + turn density + German purity --
+    # -- Combined: A1 vocab + turn density + German richness --
     {
         "name":        "optimized_blend",
         "description": "Balanced approach targeting all scoring dimensions",
@@ -140,7 +141,8 @@ CANDIDATES = [
             "1) Use only basic A1 vocabulary (der, die, das, haben, sein, gehen, machen). "
             "2) Keep each turn to one short sentence. "
             "3) Generate at least 20 turns per person. "
-            "4) Write 100% German with no English at all."
+            "4) Use rich German with umlauts and ß wherever natural. "
+            "5) Always include a Translation: line in English after each German sentence."
         ),
         "temperature": 0.65,
         "max_tokens":  768,

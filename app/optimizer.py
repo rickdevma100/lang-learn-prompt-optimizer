@@ -39,19 +39,85 @@ MIN_IMPROVEMENT = float(os.getenv("MIN_SCORE_IMPROVEMENT", "0.005"))
 # Prompt I/O
 # ---------------------------------------------------------------------------
 
+def _sanitize_prompt(text: str) -> str:
+    """Remove contradictory instructions that would strip English translations.
+
+    Previous optimization runs sometimes bake in rules like
+    'Do not include any English translation' or 'Output ONLY the German conversation'
+    which directly conflict with the requirement to include Translation: lines.
+
+    Also strips accumulated System Rule lines beyond the first — these pile up
+    when multiple optimization runs concatenate winner suffixes.
+    """
+    import re
+
+    lines = text.split("\n")
+    cleaned: list[str] = []
+
+    # Lines that explicitly strip English translations — remove them
+    poison_patterns = [
+        re.compile(r".*do\s+not\s+include\s+any\s+english\s+translation.*", re.IGNORECASE),
+        re.compile(r".*output\s+only\s+the\s+german\s+conversation.*", re.IGNORECASE),
+        re.compile(r".*100%\s+german\s+with\s+(zero|no)\s+english.*", re.IGNORECASE),
+        re.compile(r".*do\s+not\s+include\s+.*english\s+text.*", re.IGNORECASE),
+    ]
+
+    # Only keep the FIRST "System Rule:" block — strip duplicates
+    seen_system_rule = False
+
+    for line in lines:
+        stripped = line.strip()
+
+        # Skip poison lines
+        if any(p.match(stripped) for p in poison_patterns):
+            logger.info(f"Sanitize: removing contradictory line: '{stripped[:80]}'")
+            continue
+
+        # Collapse duplicate System Rule blocks
+        if stripped.startswith("System Rule:"):
+            if seen_system_rule:
+                logger.info(f"Sanitize: removing duplicate System Rule: '{stripped[:80]}'")
+                continue
+            seen_system_rule = True
+
+        cleaned.append(line)
+
+    result = "\n".join(cleaned).strip()
+
+    # Ensure Translation: instruction exists
+    if "translation" not in result.lower():
+        logger.warning("Sanitize: re-injecting Translation: instruction")
+        # Insert after the first "Requirements:" line
+        idx = result.lower().find("requirements:")
+        if idx != -1:
+            newline_after = result.find("\n", idx)
+            if newline_after != -1:
+                result = (
+                    result[:newline_after + 1]
+                    + '- For each turn, write the German sentence first, followed immediately '
+                    'by its English translation on the next line starting with "Translation: ".\n'
+                    + result[newline_after + 1:]
+                )
+
+    return result
+
+
 def _load_current_prompt() -> str:
     """Read the live prompt from prompts/scenario_dialogue.txt."""
     if CURRENT_PROMPT_FILE.exists():
         text = CURRENT_PROMPT_FILE.read_text(encoding="utf-8").strip()
         logger.info(f"Loaded current prompt ({len(text)} chars) from {CURRENT_PROMPT_FILE}")
-        return text
+        sanitized = _sanitize_prompt(text)
+        if sanitized != text:
+            logger.warning("Prompt was sanitized to fix contradictory instructions.")
+        return sanitized
 
     logger.warning("prompts/scenario_dialogue.txt not found — using built-in default.")
     return (
         "Generate a natural German conversation between exactly two people, including their English translations.\n\n"
         "Requirements:\n"
         "- Alternate clearly between Person A and Person B.\n"
-        "- For each turn, write the German sentence first, followed immediately by its English translation on the next line starting with \"Translation: \".\n"
+        '- For each turn, write the German sentence first, followed immediately by its English translation on the next line starting with "Translation: ".\n'
         "- The conversation must contain at least 20 sentences total.\n"
         "- Use simple and natural German suitable for A1-A2 level learners.\n\n"
         "Specific Scenario for this conversation:\n{scenario}\n\n"
