@@ -60,6 +60,10 @@ def _sanitize_prompt(text: str) -> str:
         re.compile(r".*output\s+only\s+the\s+german\s+conversation.*", re.IGNORECASE),
         re.compile(r".*100%\s+german\s+with\s+(zero|no)\s+english.*", re.IGNORECASE),
         re.compile(r".*do\s+not\s+include\s+.*english\s+text.*", re.IGNORECASE),
+        # Anti-numbering: remove any instruction to number turns sequentially
+        re.compile(r".*number\s+each\s+turn.*", re.IGNORECASE),
+        re.compile(r".*format\s+each\s+turn\s+as\s+['\"]?\d+\.", re.IGNORECASE),
+        re.compile(r".*\d+\.\s*Person\s+[AB].*format.*", re.IGNORECASE),
     ]
 
     # Only keep the FIRST "System Rule:" block — strip duplicates

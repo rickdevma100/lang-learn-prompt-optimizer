@@ -56,14 +56,15 @@ CANDIDATES = [
         "max_tokens":  512,
     },
 
-    # -- Target: A1 vocabulary ratio (40% of score) --
+    # -- Target: A1 vocabulary ratio (25% of score) --
     {
         "name":        "a1_strict_vocab",
         "description": "Forces strictly A1-level vocabulary",
         "suffix":      (
             "\nSystem Rule: Use ONLY the most basic A1-level German vocabulary. "
             "Stick to the 500 most common German words. "
-            "Replace any complex word with a simpler synonym."
+            "Replace any complex word with a simpler synonym. "
+            "Do NOT number the turns. Do NOT put numbers before Person A or Person B."
         ),
         "temperature": 0.5,
         "max_tokens":  512,
@@ -73,8 +74,10 @@ CANDIDATES = [
         "description": "Reinforces A1 words through natural repetition",
         "suffix":      (
             "\nSystem Rule: Naturally repeat key A1 vocabulary across turns. "
-            "Use common words like 'bitte', 'danke', 'ja', 'nein', 'gut', 'gern'. "
-            "Every sentence must use at least one of these high-frequency words."
+            "Use common words like 'bitte', 'danke', 'ja', 'nein', 'gut', 'gern', "
+            "'möchte', 'haben', 'sein', 'machen', 'können'. "
+            "Every sentence must use at least one of these high-frequency words. "
+            "Do NOT number the turns. Format strictly as 'Person A:' and 'Person B:' only."
         ),
         "temperature": 0.6,
         "max_tokens":  512,
@@ -87,8 +90,10 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: The German dialogue lines must be rich in German-specific "
             "characters (ä, ö, ü, ß) and idiomatic expressions. "
+            "Use words like 'Straße', 'Größe', 'schön', 'natürlich', 'Gemütlichkeit'. "
             "Use German filler words like 'ähm', 'also', 'na ja'. "
-            "Always keep the Translation: lines in English after each German sentence."
+            "Always keep the Translation: lines in English after each German sentence. "
+            "Do NOT number the turns. Do NOT put any digits before speaker labels."
         ),
         "temperature": 0.7,
         "max_tokens":  512,
@@ -101,7 +106,9 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: Generate at least 20 dialogue turns per person. "
             "Keep each turn to one short sentence (5-8 words maximum). "
-            "Use rapid question-and-answer exchanges."
+            "Use rapid question-and-answer exchanges. "
+            "Format each turn strictly as 'Person A:' or 'Person B:' with no numbers, "
+            "no bullet points, and no numbering of any kind."
         ),
         "temperature": 0.7,
         "max_tokens":  768,
@@ -112,7 +119,9 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: Each turn must be exactly one short sentence. "
             "Never combine two thoughts in one turn. "
-            "Generate at least 30 total sentences."
+            "Generate at least 30 total sentences. "
+            "NEVER number the turns. NEVER write '1.', '2.', etc. "
+            "Just use 'Person A:' and 'Person B:' labels directly."
         ),
         "temperature": 0.8,
         "max_tokens":  768,
@@ -125,8 +134,10 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: Avoid all advanced German vocabulary. "
             "Never use words like 'Gelegenheit', 'Voraussetzung', "
-            "'beeindruckend', 'Zusammenhang', 'selbstverständlich'. "
-            "If unsure about a word's level, use a simpler alternative."
+            "'beeindruckend', 'Zusammenhang', 'selbstverständlich', "
+            "'allerdings', 'grundsätzlich', 'tatsächlich', 'wahrscheinlich'. "
+            "If unsure about a word's level, use a simpler alternative. "
+            "Do NOT number the dialogue turns."
         ),
         "temperature": 0.6,
         "max_tokens":  512,
@@ -141,8 +152,10 @@ CANDIDATES = [
             "1) Use only basic A1 vocabulary (der, die, das, haben, sein, gehen, machen). "
             "2) Keep each turn to one short sentence. "
             "3) Generate at least 20 turns per person. "
-            "4) Use rich German with umlauts and ß wherever natural. "
-            "5) Always include a Translation: line in English after each German sentence."
+            "4) Use rich German with umlauts (ä, ö, ü) and ß wherever natural. "
+            "5) Always include a Translation: line in English after each German sentence. "
+            "6) NEVER number the turns. Write 'Person A:' and 'Person B:' without any "
+            "preceding numbers, bullets, or sequential markers."
         ),
         "temperature": 0.65,
         "max_tokens":  768,
@@ -155,7 +168,8 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: Be concise. Each turn is exactly one short sentence. "
             "No filler text, stage directions, or explanations. "
-            "Start immediately with Person A."
+            "No numbering of turns. No digits before speaker names. "
+            "Start immediately with Person A:"
         ),
         "temperature": 0.5,
         "max_tokens":  384,
