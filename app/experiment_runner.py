@@ -104,7 +104,7 @@ CANDIDATES = [
         "name":        "high_turn_density",
         "description": "Maximizes dialogue turns with short exchanges",
         "suffix":      (
-            "\nSystem Rule: Generate at least 20 dialogue turns per person. "
+            "\nSystem Rule: Generate at most 13 dialogue turns per person (26 total). "
             "Keep each turn to one short sentence (5-8 words maximum). "
             "Use rapid question-and-answer exchanges. "
             "Format each turn strictly as 'Person A:' or 'Person B:' with no numbers, "
@@ -119,7 +119,7 @@ CANDIDATES = [
         "suffix":      (
             "\nSystem Rule: Each turn must be exactly one short sentence. "
             "Never combine two thoughts in one turn. "
-            "Generate at least 30 total sentences. "
+            "Generate at most 26 total sentences. "
             "NEVER number the turns. NEVER write '1.', '2.', etc. "
             "Just use 'Person A:' and 'Person B:' labels directly."
         ),
@@ -151,7 +151,7 @@ CANDIDATES = [
             "\nSystem Rule: Follow these rules strictly: "
             "1) Use only basic A1 vocabulary (der, die, das, haben, sein, gehen, machen). "
             "2) Keep each turn to one short sentence. "
-            "3) Generate at least 20 turns per person. "
+            "3) Generate at most 13 turns per person (26 total). "
             "4) Use rich German with umlauts (ä, ö, ü) and ß wherever natural. "
             "5) Always include a Translation: line in English after each German sentence. "
             "6) NEVER number the turns. Write 'Person A:' and 'Person B:' without any "
