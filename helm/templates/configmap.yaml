@@ -1,0 +1,15 @@
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: lang-learn-prompt-optimizer-config
+  namespace: {{ .Values.namespace }}
+  labels:
+    {{- include "prompt-optimizer.labels" . | nindent 4 }}
+data:
+  APP_ROOT: {{ .Values.config.appRoot | quote }}
+  MIN_SCORE_IMPROVEMENT: {{ .Values.config.minScoreImprovement | quote }}
+  INFERENCE_SERVICE_URL: {{ .Values.config.inferenceServiceUrl | quote }}
+  LOG_LEVEL: {{ .Values.config.logLevel | quote }}
+  MLFLOW_TRACKING_URI: {{ .Values.config.mlflowTrackingUri | quote }}
+  REDIS_HOST: {{ .Values.config.redisHost | quote }}
+  REDIS_PORT: {{ .Values.config.redisPort | quote }}

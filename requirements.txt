@@ -4,3 +4,4 @@ pydantic==2.9.0
 mlflow>=2.18,<3.0
 pyyaml==6.0.2
 kubernetes==31.0.0
+redis>=5.0,<6.0

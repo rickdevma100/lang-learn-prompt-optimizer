@@ -8,6 +8,7 @@ All scoring logic lives in app/evaluate_prompts.py.
 """
 from __future__ import annotations
 
+import concurrent.futures
 import logging
 import os
 import random
@@ -18,7 +19,7 @@ from pathlib import Path
 logger = logging.getLogger("prompt-optimizer.runner")
 
 # ---------------------------------------------------------------------------
-# Paths — local to this app
+# Paths & Environment — local to this app
 # ---------------------------------------------------------------------------
 APP_ROOT = Path(os.getenv("APP_ROOT", Path(__file__).parent.parent))
 PROMPTS_DIR = APP_ROOT / "prompts"
@@ -36,15 +37,58 @@ MLFLOW_TRACKING_URI = os.getenv(
     "http://mlflow-tracking.lang-learn.svc.cluster.local:5000",
 )
 
-# Default test scenarios (used when evaluating each candidate)
+# Redis Configuration for fetching recent user scenarios
+REDIS_HOST = os.getenv("REDIS_HOST", "redis-stack.lang-learn.svc.cluster.local")
+REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
+
+# Maximum concurrent evaluation workers (should match inference pod count)
+MAX_EVAL_WORKERS = int(os.getenv("MAX_EVAL_WORKERS", "2"))
+
+# Default test scenarios bank (used when Redis scenarios are unavailable or < 5)
 DEFAULT_SCENARIOS = [
     "ordering food at a restaurant",
     "asking for directions at the train station",
     "shopping for clothes",
+    "booking a hotel room",
+    "buying groceries at the supermarket",
 ]
 
+
+def fetch_recent_redis_scenarios(limit: int = 5) -> list[str]:
+    """Fetch up to `limit` recent unique scenarios from Redis `dialog:*` keys."""
+    scenarios: list[str] = []
+    try:
+        # pyrefly: ignore [missing-import]
+        import redis  # lazy import — optional dependency
+        r = redis.Redis(
+            host=REDIS_HOST,
+            port=REDIS_PORT,
+            decode_responses=True,
+            socket_connect_timeout=2.0,
+        )
+        for key in r.scan_iter("dialog:*"):
+            scen = r.hget(key, "scenario")
+            if scen and isinstance(scen, str) and scen.strip() and scen.strip() not in scenarios:
+                scenarios.append(scen.strip())
+            if len(scenarios) >= limit:
+                break
+        if scenarios:
+            logger.info(f"Fetched {len(scenarios)} recent scenarios from Redis.")
+    except Exception as e:
+        logger.warning(f"Could not fetch scenarios from Redis ({e}). Using default scenario bank.")
+
+    # Backfill with DEFAULT_SCENARIOS if Redis returns fewer than `limit`
+    for s in DEFAULT_SCENARIOS:
+        if len(scenarios) >= limit:
+            break
+        if s not in scenarios:
+            scenarios.append(s)
+
+    return scenarios[:limit]
+
+
 # ---------------------------------------------------------------------------
-# Candidate prompt variations
+# Candidate prompt variations (18 diverse candidates)
 # ---------------------------------------------------------------------------
 CANDIDATES = [
     # -- Baseline (always required) --
@@ -64,6 +108,7 @@ CANDIDATES = [
             "\nSystem Rule: Use ONLY the most basic A1-level German vocabulary. "
             "Stick to the 500 most common German words. "
             "Replace any complex word with a simpler synonym. "
+            "Ensure each dialogue turn contains at least 7 words. "
             "Do NOT number the turns. Do NOT put numbers before Person A or Person B."
         ),
         "temperature": 0.5,
@@ -76,10 +121,44 @@ CANDIDATES = [
             "\nSystem Rule: Naturally repeat key A1 vocabulary across turns. "
             "Use common words like 'bitte', 'danke', 'ja', 'nein', 'gut', 'gern', "
             "'möchte', 'haben', 'sein', 'machen', 'können'. "
-            "Every sentence must use at least one of these high-frequency words. "
+            "Ensure each dialogue turn contains at least 7 words. "
             "Do NOT number the turns. Format strictly as 'Person A:' and 'Person B:' only."
         ),
         "temperature": 0.6,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "a1_high_frequency_verbs",
+        "description": "Focuses on high-frequency German A1 verbs",
+        "suffix":      (
+            "\nSystem Rule: Focus heavily on fundamental German verbs such as 'sein', 'haben', "
+            "'kommen', 'gehen', 'kaufen', 'trinken', 'essen', 'wohnen', 'arbeiten'. "
+            "Each dialogue turn must contain at least 7 words. "
+            "Do NOT number the turns."
+        ),
+        "temperature": 0.55,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "a1_noun_essentials",
+        "description": "Uses clear A1 daily nouns with correct articles",
+        "suffix":      (
+            "\nSystem Rule: Use essential everyday German nouns with articles (der, die, das). "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Keep phrasings natural and practical. Do NOT number speaker turns."
+        ),
+        "temperature": 0.6,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "a1_simple_phrases",
+        "description": "Emphasizes clear standard A1 conversational phrases",
+        "suffix":      (
+            "\nSystem Rule: Rely on clear, standard A1 phrases suitable for everyday social interactions. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number speaker turns."
+        ),
+        "temperature": 0.5,
         "max_tokens":  512,
     },
 
@@ -91,22 +170,56 @@ CANDIDATES = [
             "\nSystem Rule: The German dialogue lines must be rich in German-specific "
             "characters (ä, ö, ü, ß) and idiomatic expressions. "
             "Use words like 'Straße', 'Größe', 'schön', 'natürlich', 'Gemütlichkeit'. "
-            "Use German filler words like 'ähm', 'also', 'na ja'. "
+            "Ensure each dialogue turn contains at least 7 words. "
             "Always keep the Translation: lines in English after each German sentence. "
             "Do NOT number the turns. Do NOT put any digits before speaker labels."
         ),
         "temperature": 0.7,
         "max_tokens":  512,
     },
+    {
+        "name":        "german_filler_idioms",
+        "description": "Incorporates natural A1 German modal particles and fillers",
+        "suffix":      (
+            "\nSystem Rule: Include natural German conversational particles such as 'also', "
+            "'ja', 'mal', 'denn', 'doch' to make dialogue authentic. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number speaker turns."
+        ),
+        "temperature": 0.65,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "umlaut_emphasis",
+        "description": "Encourages words with umlauts and sharp s",
+        "suffix":      (
+            "\nSystem Rule: Include natural German words containing ä, ö, ü, ß where applicable. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number turns."
+        ),
+        "temperature": 0.6,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "natural_dialogue_flow",
+        "description": "Prioritizes natural spoken German flow",
+        "suffix":      (
+            "\nSystem Rule: Make the dialogue sound like a natural everyday spoken conversation. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number turns."
+        ),
+        "temperature": 0.7,
+        "max_tokens":  512,
+    },
 
-    # -- Target: Dialogue turns (15% of score, capped at 15) --
+    # -- Target: Dialogue turns & depth --
     {
         "name":        "high_turn_density",
-        "description": "Maximizes dialogue turns with short exchanges",
+        "description": "Maximizes dialogue turns with full exchanges",
         "suffix":      (
             "\nSystem Rule: Generate at most 13 dialogue turns per person (26 total). "
-            "Keep each turn to one short sentence (5-8 words maximum). "
-            "Use rapid question-and-answer exchanges. "
+            "Ensure each turn contains at least 7 words. "
+            "Use natural question-and-answer exchanges. "
             "Format each turn strictly as 'Person A:' or 'Person B:' with no numbers, "
             "no bullet points, and no numbering of any kind."
         ),
@@ -114,16 +227,38 @@ CANDIDATES = [
         "max_tokens":  768,
     },
     {
-        "name":        "micro_turns",
-        "description": "Ultra-short turns for maximum turn count",
+        "name":        "detailed_turns",
+        "description": "Ensures detailed dialogue turns with at least 7 words each",
         "suffix":      (
-            "\nSystem Rule: Each turn must be exactly one short sentence. "
-            "Never combine two thoughts in one turn. "
-            "Generate at most 26 total sentences. "
+            "\nSystem Rule: Each dialogue turn must contain at least 7 words. "
+            "Avoid short micro-turns or single-word replies. "
+            "Generate detailed, natural conversational responses. "
             "NEVER number the turns. NEVER write '1.', '2.', etc. "
             "Just use 'Person A:' and 'Person B:' labels directly."
         ),
-        "temperature": 0.8,
+        "temperature": 0.7,
+        "max_tokens":  768,
+    },
+    {
+        "name":        "multi_sentence_depth",
+        "description": "Encourages multi-sentence conversational turns",
+        "suffix":      (
+            "\nSystem Rule: Each turn should be detailed and composed of complete sentences. "
+            "Ensure each dialogue turn contains at least 7 words total. "
+            "Do NOT number turns."
+        ),
+        "temperature": 0.7,
+        "max_tokens":  768,
+    },
+    {
+        "name":        "substantive_exchanges",
+        "description": "Focuses on meaningful, substantive turn content",
+        "suffix":      (
+            "\nSystem Rule: Ensure both Person A and Person B provide complete, helpful answers. "
+            "Each dialogue turn must contain at least 7 words. "
+            "Do NOT number speaker turns."
+        ),
+        "temperature": 0.65,
         "max_tokens":  768,
     },
 
@@ -136,21 +271,43 @@ CANDIDATES = [
             "Never use words like 'Gelegenheit', 'Voraussetzung', "
             "'beeindruckend', 'Zusammenhang', 'selbstverständlich', "
             "'allerdings', 'grundsätzlich', 'tatsächlich', 'wahrscheinlich'. "
-            "If unsure about a word's level, use a simpler alternative. "
+            "Ensure each dialogue turn contains at least 7 words. "
             "Do NOT number the dialogue turns."
         ),
         "temperature": 0.6,
         "max_tokens":  512,
     },
+    {
+        "name":        "present_tense_focus",
+        "description": "Keeps grammar strictly in present tense (Präsens)",
+        "suffix":      (
+            "\nSystem Rule: Use only present tense (Präsens) verbs for beginner clarity. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number speaker turns."
+        ),
+        "temperature": 0.5,
+        "max_tokens":  512,
+    },
+    {
+        "name":        "basic_syntax_only",
+        "description": "Uses simple main clause (SVO) sentence structure",
+        "suffix":      (
+            "\nSystem Rule: Keep sentence structure simple using Subject-Verb-Object word order. "
+            "Ensure each dialogue turn contains at least 7 words. "
+            "Do NOT number speaker turns."
+        ),
+        "temperature": 0.5,
+        "max_tokens":  512,
+    },
 
-    # -- Combined: A1 vocab + turn density + German richness --
+    # -- Combined & Performance --
     {
         "name":        "optimized_blend",
         "description": "Balanced approach targeting all scoring dimensions",
         "suffix":      (
             "\nSystem Rule: Follow these rules strictly: "
             "1) Use only basic A1 vocabulary (der, die, das, haben, sein, gehen, machen). "
-            "2) Keep each turn to one short sentence. "
+            "2) Ensure each dialogue turn contains at least 7 words. "
             "3) Generate at most 13 turns per person (26 total). "
             "4) Use rich German with umlauts (ä, ö, ü) and ß wherever natural. "
             "5) Always include a Translation: line in English after each German sentence. "
@@ -160,14 +317,12 @@ CANDIDATES = [
         "temperature": 0.65,
         "max_tokens":  768,
     },
-
-    # -- Target: Latency (10% of score) + structure --
     {
         "name":        "concise_fast",
-        "description": "Optimized for speed with concise output",
+        "description": "Optimized for speed with detailed output",
         "suffix":      (
-            "\nSystem Rule: Be concise. Each turn is exactly one short sentence. "
-            "No filler text, stage directions, or explanations. "
+            "\nSystem Rule: Each dialogue turn must contain at least 7 words. "
+            "No filler text, stage directions, or explanations outside the dialogue. "
             "No numbering of turns. No digits before speaker names. "
             "Start immediately with Person A:"
         ),
@@ -181,11 +336,11 @@ CANDIDATES = [
 # Direct evaluation (replaces DVC subprocess)
 # ---------------------------------------------------------------------------
 
-def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
+def _evaluate_candidate(candidate: dict, base_prompt: str, scenarios: list[str] | None = None) -> dict:
     """Evaluate a single candidate by calling the inference service directly.
 
     Constructs the full prompt (base + suffix), calls the inference service
-    for each test scenario, and computes quality metrics.
+    for each test scenario in `scenarios`, and computes quality metrics.
 
     Returns a metrics dict compatible with composite_score().
     """
@@ -207,7 +362,7 @@ def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
     if suffix:
         full_prompt = base_prompt.rstrip() + "\n" + suffix.lstrip("\n")
 
-    scenarios = DEFAULT_SCENARIOS
+    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(5)
 
     all_word_counts: list[int] = []
     all_sentence_counts: list[int] = []
@@ -217,7 +372,7 @@ def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
     all_german_ratios: list[float] = []
     total_time = 0.0
 
-    for scenario in scenarios:
+    for scenario in test_scenarios:
         logger.debug(f"  Evaluating: '{scenario}' for candidate '{candidate['name']}'")
 
         start = time.time()
@@ -248,7 +403,7 @@ def _evaluate_candidate(candidate: dict, base_prompt: str) -> dict:
 
     metrics = {
         "candidate_name": candidate["name"],
-        "scenarios_evaluated": len(scenarios),
+        "scenarios_evaluated": len(test_scenarios),
         "total_generations": n,
         "avg_word_count": round(sum(all_word_counts) / n, 1),
         "avg_sentence_count": round(sum(all_sentence_counts) / n, 1),
@@ -291,17 +446,20 @@ def _compute_quality_score(metrics: dict) -> float:
 # Public API
 # ---------------------------------------------------------------------------
 
-def run_experiments(base_prompt: str) -> list[dict]:
-    """Benchmark all candidates and rank them, logging to MLflow.
+def run_experiments(base_prompt: str, scenarios: list[str] | None = None) -> list[dict]:
+    """Benchmark all candidates concurrently and rank them, logging to MLflow.
 
     For each candidate:
-      1. Evaluate directly against the inference service (no subprocess)
+      1. Evaluate directly against the inference service (concurrent execution)
       2. Log parameters, metrics, and prompt text to MLflow
       3. Fall back to simulated metrics if inference is unreachable
 
     Returns a list of result dicts sorted best-first by quality_score.
     Each dict includes: name, description, suffix, metrics, score, latency_s, simulated.
     """
+    # Fetch 5 Redis scenarios if not explicitly passed
+    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(5)
+
     # Import mlflow lazily so tests can mock or skip it
     try:
         # pyrefly: ignore [missing-import]
@@ -327,15 +485,18 @@ def run_experiments(base_prompt: str) -> list[dict]:
         if mlflow_available:
             mlflow.log_param("num_candidates", len(CANDIDATES))
             mlflow.log_param("inference_url", INFERENCE_URL)
-            mlflow.log_param("scenarios", ", ".join(DEFAULT_SCENARIOS))
+            mlflow.log_param("scenarios", ", ".join(test_scenarios))
 
-        for cand in CANDIDATES:
-            logger.info(f"Benchmarking candidate: {cand['name']}")
+        logger.info(
+            f"Benchmarking {len(CANDIDATES)} candidates concurrently across {len(test_scenarios)} scenarios "
+            f"(workers={MAX_EVAL_WORKERS})…"
+        )
+
+        def _eval_worker(cand: dict) -> dict:
             t0 = time.time()
             simulated = False
-
             try:
-                metrics = _evaluate_candidate(cand, base_prompt)
+                metrics = _evaluate_candidate(cand, base_prompt, test_scenarios)
             except Exception as e:
                 logger.warning(
                     f"Evaluation failed for candidate '{cand['name']}': {e}. "
@@ -345,6 +506,30 @@ def run_experiments(base_prompt: str) -> list[dict]:
                 simulated = True
 
             score = metrics.get("quality_score") or _compute_quality_score(metrics)
+
+            return {
+                "cand": cand,
+                "metrics": metrics,
+                "score": score,
+                "simulated": simulated,
+                "elapsed_s": round(time.time() - t0, 2),
+            }
+
+        cand_eval_results = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=MAX_EVAL_WORKERS) as executor:
+            future_to_cand = {executor.submit(_eval_worker, cand): cand for cand in CANDIDATES}
+            for future in concurrent.futures.as_completed(future_to_cand):
+                try:
+                    res = future.result()
+                    cand_eval_results.append(res)
+                except Exception as exc:
+                    logger.error(f"Worker exception during evaluation: {exc}")
+
+        for res in cand_eval_results:
+            cand = res["cand"]
+            metrics = res["metrics"]
+            score = res["score"]
+            simulated = res["simulated"]
 
             # Log to MLflow as a nested child run
             if mlflow_available:
@@ -379,14 +564,14 @@ def run_experiments(base_prompt: str) -> list[dict]:
                 "metrics":     metrics,
                 "score":       score,
                 "latency_s":   metrics.get("avg_generation_time_s", 0.0),
-                "elapsed_s":   round(time.time() - t0, 2),
+                "elapsed_s":   res["elapsed_s"],
                 "simulated":   simulated,
             })
 
     results.sort(key=lambda r: r["score"], reverse=True)
     logger.info(f"Ranking: {[(r['name'], r['score']) for r in results]}")
 
-    # Persist metrics of the winner for audit (same as before)
+    # Persist metrics of the winner for audit
     import json
     METRICS_FILE.parent.mkdir(parents=True, exist_ok=True)
     with open(METRICS_FILE, "w", encoding="utf-8") as f:

@@ -95,14 +95,24 @@ Each candidate targets specific dimensions of the scoring formula:
 | Candidate | Target Dimension | Score Weight | Strategy |
 |---|---|---|---|
 | `current` | Baseline | — | Existing prompt, no modifications |
-| `a1_strict_vocab` | A1 vocabulary | 40% | Forces top-500 most common German words |
-| `a1_word_repetition` | A1 vocabulary | 40% | Natural repetition of high-frequency A1 words |
-| `pure_german` | German ratio | 25% | Eliminates all English content, even filler |
-| `high_turn_density` | Dialogue turns | 15% | 20+ turns per person, short Q&A exchanges |
-| `micro_turns` | Dialogue turns | 15% | Ultra-short one-sentence turns, 30+ total |
-| `b2_eliminator` | B2 penalty | -10% | Explicitly blacklists advanced vocabulary |
-| `optimized_blend` | All dimensions | Combined | Balances A1 vocab + turns + German purity |
-| `concise_fast` | Latency | 10% | Minimal output, lower max_tokens for speed |
+| `a1_strict_vocab` | A1 vocabulary | 40% | Forces top-500 most common German words (7+ words/turn) |
+| `a1_word_repetition` | A1 vocabulary | 40% | Natural repetition of high-frequency A1 words (7+ words/turn) |
+| `a1_high_frequency_verbs` | A1 vocabulary | 40% | Focuses on core A1 verbs: sein, haben, gehen, kaufen (7+ words/turn) |
+| `a1_noun_essentials` | A1 vocabulary | 40% | Emphasizes daily A1 nouns with articles der/die/das (7+ words/turn) |
+| `a1_simple_phrases` | A1 vocabulary | 40% | Standard A1 conversational social phrases (7+ words/turn) |
+| `rich_german` | German ratio | 20% | Rich in German characters (ä, ö, ü, ß) and idioms (7+ words/turn) |
+| `german_filler_idioms` | German ratio | 20% | German modal particles: also, ja, mal, denn, doch (7+ words/turn) |
+| `umlaut_emphasis` | German ratio | 20% | Encourages umlaut words and sharp s (7+ words/turn) |
+| `natural_dialogue_flow` | German ratio | 20% | Prioritizes authentic everyday spoken German flow (7+ words/turn) |
+| `high_turn_density` | Dialogue turns | 20% | Up to 26 turns total with complete exchanges (7+ words/turn) |
+| `detailed_turns` | Dialogue turns | 20% | Detailed conversational responses (7+ words/turn) |
+| `multi_sentence_depth` | Dialogue turns | 20% | Multi-sentence conversational turn depth (7+ words/turn) |
+| `substantive_exchanges` | Dialogue turns | 20% | Complete, substantive answers for Person A and B (7+ words/turn) |
+| `b2_eliminator` | B2 penalty | -20% | Explicitly blacklists advanced B2 vocabulary (7+ words/turn) |
+| `present_tense_focus` | Grammar | -20% | Strict Präsens present tense for beginner clarity (7+ words/turn) |
+| `basic_syntax_only` | Grammar | -20% | Simple main-clause SVO word order (7+ words/turn) |
+| `optimized_blend` | All dimensions | Combined | Balances A1 vocab + turns + German richness (7+ words/turn) |
+| `concise_fast` | Latency | 10% | Efficient output without filler outside turns (7+ words/turn) |
 
 ---
 

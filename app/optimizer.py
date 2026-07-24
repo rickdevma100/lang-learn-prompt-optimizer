@@ -122,6 +122,7 @@ def _load_current_prompt() -> str:
         "Requirements:\n"
         "- Alternate clearly between Person A and Person B.\n"
         '- For each turn, write the German sentence first, followed immediately by its English translation on the next line starting with "Translation: ".\n'
+        "- Each dialogue turn must contain at least 7 words.\n"
         "- The conversation must contain at least 20 sentences total.\n"
         "- Use simple and natural German suitable for A1-A2 level learners.\n\n"
         "Specific Scenario for this conversation:\n{scenario}\n\n"

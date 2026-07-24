@@ -24,17 +24,11 @@ spec:
             - containerPort: {{ .Values.service.port }}
               protocol: TCP
 
+          envFrom:
+            - configMapRef:
+                name: lang-learn-prompt-optimizer-config
+
           env:
-            - name: APP_ROOT
-              value: {{ .Values.config.appRoot | quote }}
-            - name: MIN_SCORE_IMPROVEMENT
-              value: {{ .Values.config.minScoreImprovement | quote }}
-            - name: INFERENCE_SERVICE_URL
-              value: {{ .Values.config.inferenceServiceUrl | quote }}
-            - name: LOG_LEVEL
-              value: {{ .Values.config.logLevel | quote }}
-            - name: MLFLOW_TRACKING_URI
-              value: {{ .Values.config.mlflowTrackingUri | quote }}
 
             # Email settings
             - name: ADMIN_EMAIL

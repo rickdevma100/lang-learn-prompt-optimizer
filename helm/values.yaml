@@ -22,6 +22,8 @@ config:
   inferenceServiceUrl: "http://lang-learn-inference-predictor.lang-learn.svc.cluster.local/scenario_dialogue"
   logLevel: "INFO"
   mlflowTrackingUri: "http://mlflow-tracking.lang-learn.svc.cluster.local:5000"
+  redisHost: "redis-stack.lang-learn.svc.cluster.local"
+  redisPort: "6379"
 
 # Email / SMTP settings
 email:
