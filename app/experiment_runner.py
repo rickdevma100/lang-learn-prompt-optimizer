@@ -114,53 +114,6 @@ CANDIDATES = [
         "temperature": 0.5,
         "max_tokens":  512,
     },
-    {
-        "name":        "a1_word_repetition",
-        "description": "Reinforces A1 words through natural repetition",
-        "suffix":      (
-            "\nSystem Rule: Naturally repeat key A1 vocabulary across turns. "
-            "Use common words like 'bitte', 'danke', 'ja', 'nein', 'gut', 'gern', "
-            "'möchte', 'haben', 'sein', 'machen', 'können'. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number the turns. Format strictly as 'Person A:' and 'Person B:' only."
-        ),
-        "temperature": 0.6,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "a1_high_frequency_verbs",
-        "description": "Focuses on high-frequency German A1 verbs",
-        "suffix":      (
-            "\nSystem Rule: Focus heavily on fundamental German verbs such as 'sein', 'haben', "
-            "'kommen', 'gehen', 'kaufen', 'trinken', 'essen', 'wohnen', 'arbeiten'. "
-            "Each dialogue turn must contain at least 7 words. "
-            "Do NOT number the turns."
-        ),
-        "temperature": 0.55,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "a1_noun_essentials",
-        "description": "Uses clear A1 daily nouns with correct articles",
-        "suffix":      (
-            "\nSystem Rule: Use essential everyday German nouns with articles (der, die, das). "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Keep phrasings natural and practical. Do NOT number speaker turns."
-        ),
-        "temperature": 0.6,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "a1_simple_phrases",
-        "description": "Emphasizes clear standard A1 conversational phrases",
-        "suffix":      (
-            "\nSystem Rule: Rely on clear, standard A1 phrases suitable for everyday social interactions. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number speaker turns."
-        ),
-        "temperature": 0.5,
-        "max_tokens":  512,
-    },
 
     # -- Target: German language ratio (20% of score) --
     {
@@ -200,32 +153,7 @@ CANDIDATES = [
         "temperature": 0.6,
         "max_tokens":  512,
     },
-    {
-        "name":        "natural_dialogue_flow",
-        "description": "Prioritizes natural spoken German flow",
-        "suffix":      (
-            "\nSystem Rule: Make the dialogue sound like a natural everyday spoken conversation. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number turns."
-        ),
-        "temperature": 0.7,
-        "max_tokens":  512,
-    },
-
     # -- Target: Dialogue turns & depth --
-    {
-        "name":        "high_turn_density",
-        "description": "Maximizes dialogue turns with full exchanges",
-        "suffix":      (
-            "\nSystem Rule: Generate at most 13 dialogue turns per person (26 total). "
-            "Ensure each turn contains at least 7 words. "
-            "Use natural question-and-answer exchanges. "
-            "Format each turn strictly as 'Person A:' or 'Person B:' with no numbers, "
-            "no bullet points, and no numbering of any kind."
-        ),
-        "temperature": 0.7,
-        "max_tokens":  768,
-    },
     {
         "name":        "detailed_turns",
         "description": "Ensures detailed dialogue turns with at least 7 words each",
@@ -237,28 +165,6 @@ CANDIDATES = [
             "Just use 'Person A:' and 'Person B:' labels directly."
         ),
         "temperature": 0.7,
-        "max_tokens":  768,
-    },
-    {
-        "name":        "multi_sentence_depth",
-        "description": "Encourages multi-sentence conversational turns",
-        "suffix":      (
-            "\nSystem Rule: Each turn should be detailed and composed of complete sentences. "
-            "Ensure each dialogue turn contains at least 7 words total. "
-            "Do NOT number turns."
-        ),
-        "temperature": 0.7,
-        "max_tokens":  768,
-    },
-    {
-        "name":        "substantive_exchanges",
-        "description": "Focuses on meaningful, substantive turn content",
-        "suffix":      (
-            "\nSystem Rule: Ensure both Person A and Person B provide complete, helpful answers. "
-            "Each dialogue turn must contain at least 7 words. "
-            "Do NOT number speaker turns."
-        ),
-        "temperature": 0.65,
         "max_tokens":  768,
     },
 
@@ -275,28 +181,6 @@ CANDIDATES = [
             "Do NOT number the dialogue turns."
         ),
         "temperature": 0.6,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "present_tense_focus",
-        "description": "Keeps grammar strictly in present tense (Präsens)",
-        "suffix":      (
-            "\nSystem Rule: Use only present tense (Präsens) verbs for beginner clarity. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number speaker turns."
-        ),
-        "temperature": 0.5,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "basic_syntax_only",
-        "description": "Uses simple main clause (SVO) sentence structure",
-        "suffix":      (
-            "\nSystem Rule: Keep sentence structure simple using Subject-Verb-Object word order. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number speaker turns."
-        ),
-        "temperature": 0.5,
         "max_tokens":  512,
     },
 

@@ -1,10 +1,10 @@
 {
-  "candidate_name": "present_tense_focus",
-  "avg_word_count": 308,
-  "avg_sentence_count": 20,
-  "avg_dialogue_turns": 15,
-  "avg_german_ratio": 0.738,
-  "a1_ratio": 0.428,
-  "b2_ratio": 0.02,
-  "avg_generation_time_s": 5.87
+  "candidate_name": "rich_german",
+  "avg_word_count": 231,
+  "avg_sentence_count": 34,
+  "avg_dialogue_turns": 16,
+  "avg_german_ratio": 0.76,
+  "a1_ratio": 0.421,
+  "b2_ratio": 0.028,
+  "avg_generation_time_s": 2.55
 }
