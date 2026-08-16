@@ -3,6 +3,7 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 import sys
+# pyrefly: ignore [missing-import]
 import pytest
 
 from app.experiment_runner import DEFAULT_SCENARIOS, fetch_recent_redis_scenarios, CANDIDATES, run_experiments
