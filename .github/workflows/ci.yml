@@ -51,6 +51,8 @@ jobs:
 
       - name: Scan Image with Trivy
         uses: aquasecurity/trivy-action@master
+        env:
+          TRIVY_PLATFORM: linux/arm64
         with:
           image-ref: ${{ env.REGISTRY }}/${{ env.PROJECT }}/${{ env.SERVICE_NAME }}:${{ steps.meta.outputs.tag }}
           format: 'table'
