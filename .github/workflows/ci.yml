@@ -76,16 +76,13 @@ jobs:
           repository: rickdevma100/lang-learn-gitops
           token: ${{ secrets.GITOPS_PAT }}
 
-      - name: Update Image Tag in Values
+      - name: Update Image Tag and Push to GitOps Repo
         run: |
           TAG="sha-${GITHUB_SHA::12}"
-          yq -i ".optimizer.image.tag = \"$TAG\"" environments/production/values.yaml
-
-      - name: Commit and Push to GitOps Repo
-        run: |
           git config user.name "ci-bot"
           git config user.email "ci@yourdomain.com"
           git pull --rebase
+          yq -i ".optimizer.image.tag = \"$TAG\"" environments/production/values.yaml
           git add environments/production/values.yaml
           git commit -m "deploy(optimizer): bump image tag to sha-${GITHUB_SHA::12}"
           git push
