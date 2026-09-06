@@ -41,20 +41,20 @@ MLFLOW_TRACKING_URI = os.getenv(
 REDIS_HOST = os.getenv("REDIS_HOST", "redis-stack.lang-learn.svc.cluster.local")
 REDIS_PORT = int(os.getenv("REDIS_PORT", "6379"))
 
-# Maximum concurrent evaluation workers (should match inference pod count)
-MAX_EVAL_WORKERS = int(os.getenv("MAX_EVAL_WORKERS", "2"))
+# Maximum concurrent evaluation workers (set to 1 to prevent overloading single-threaded local LLMs)
+MAX_EVAL_WORKERS = int(os.getenv("MAX_EVAL_WORKERS", "1"))
 
-# Default test scenarios bank (used when Redis scenarios are unavailable or < 5)
+# Default test scenarios bank (contains curated scenarios; evaluated limit defaults to 1)
 DEFAULT_SCENARIOS = [
     "ordering food at a restaurant",
-    "asking for directions at the train station",
-    "shopping for clothes",
-    "booking a hotel room",
-    "buying groceries at the supermarket",
+    "asking for directions at the station",
+    "shopping for groceries",
+    "booking a room at a hotel",
+    "introducing yourself at a meetup",
 ]
 
 
-def fetch_recent_redis_scenarios(limit: int = 5) -> list[str]:
+def fetch_recent_redis_scenarios(limit: int = 1) -> list[str]:
     """Fetch up to `limit` recent unique scenarios from Redis `dialog:*` keys."""
     scenarios: list[str] = []
     try:
@@ -88,7 +88,7 @@ def fetch_recent_redis_scenarios(limit: int = 5) -> list[str]:
 
 
 # ---------------------------------------------------------------------------
-# Candidate prompt variations (18 diverse candidates)
+# Candidate prompt variations (top 3 candidates for fast, lightweight benchmarking)
 # ---------------------------------------------------------------------------
 CANDIDATES = [
     # -- Baseline (always required) --
@@ -96,95 +96,21 @@ CANDIDATES = [
         "name":        "current",
         "description": "Existing prompt — no changes",
         "suffix":      "",
-        "temperature": 0.7,
-        "max_tokens":  512,
-    },
-
-    # -- Target: A1 vocabulary ratio (25% of score) --
-    {
-        "name":        "a1_strict_vocab",
-        "description": "Forces strictly A1-level vocabulary",
-        "suffix":      (
-            "\nSystem Rule: Use ONLY the most basic A1-level German vocabulary. "
-            "Stick to the 500 most common German words. "
-            "Replace any complex word with a simpler synonym. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number the turns. Do NOT put numbers before Person A or Person B."
-        ),
         "temperature": 0.5,
-        "max_tokens":  512,
-    },
-
-    # -- Target: German language ratio (20% of score) --
-    {
-        "name":        "rich_german",
-        "description": "Maximises German-specific characters and vocabulary",
-        "suffix":      (
-            "\nSystem Rule: The German dialogue lines must be rich in German-specific "
-            "characters (ä, ö, ü, ß) and idiomatic expressions. "
-            "Use words like 'Straße', 'Größe', 'schön', 'natürlich', 'Gemütlichkeit'. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Always keep the Translation: lines in English after each German sentence. "
-            "Do NOT number the turns. Do NOT put any digits before speaker labels."
-        ),
-        "temperature": 0.7,
-        "max_tokens":  512,
+        "max_tokens":  384,
     },
     {
-        "name":        "german_filler_idioms",
-        "description": "Incorporates natural A1 German modal particles and fillers",
-        "suffix":      (
-            "\nSystem Rule: Include natural German conversational particles such as 'also', "
-            "'ja', 'mal', 'denn', 'doch' to make dialogue authentic. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number speaker turns."
-        ),
-        "temperature": 0.65,
-        "max_tokens":  512,
-    },
-    {
-        "name":        "umlaut_emphasis",
-        "description": "Encourages words with umlauts and sharp s",
-        "suffix":      (
-            "\nSystem Rule: Include natural German words containing ä, ö, ü, ß where applicable. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number turns."
-        ),
-        "temperature": 0.6,
-        "max_tokens":  512,
-    },
-    # -- Target: Dialogue turns & depth --
-    {
-        "name":        "detailed_turns",
-        "description": "Ensures detailed dialogue turns with at least 7 words each",
+        "name":        "concise_fast",
+        "description": "Optimized for speed with detailed output",
         "suffix":      (
             "\nSystem Rule: Each dialogue turn must contain at least 7 words. "
-            "Avoid short micro-turns or single-word replies. "
-            "Generate detailed, natural conversational responses. "
-            "NEVER number the turns. NEVER write '1.', '2.', etc. "
-            "Just use 'Person A:' and 'Person B:' labels directly."
+            "No filler text, stage directions, or explanations outside the dialogue. "
+            "No numbering of turns. No digits before speaker names. "
+            "Start immediately with Person A:"
         ),
-        "temperature": 0.7,
-        "max_tokens":  768,
+        "temperature": 0.5,
+        "max_tokens":  384,
     },
-
-    # -- Target: Reduce B2 penalty (-10% of score) --
-    {
-        "name":        "b2_eliminator",
-        "description": "Explicitly avoids B2-level vocabulary",
-        "suffix":      (
-            "\nSystem Rule: Avoid all advanced German vocabulary. "
-            "Never use words like 'Gelegenheit', 'Voraussetzung', "
-            "'beeindruckend', 'Zusammenhang', 'selbstverständlich', "
-            "'allerdings', 'grundsätzlich', 'tatsächlich', 'wahrscheinlich'. "
-            "Ensure each dialogue turn contains at least 7 words. "
-            "Do NOT number the dialogue turns."
-        ),
-        "temperature": 0.6,
-        "max_tokens":  512,
-    },
-
-    # -- Combined & Performance --
     {
         "name":        "optimized_blend",
         "description": "Balanced approach targeting all scoring dimensions",
@@ -197,18 +123,6 @@ CANDIDATES = [
             "5) Always include a Translation: line in English after each German sentence. "
             "6) NEVER number the turns. Write 'Person A:' and 'Person B:' without any "
             "preceding numbers, bullets, or sequential markers."
-        ),
-        "temperature": 0.65,
-        "max_tokens":  768,
-    },
-    {
-        "name":        "concise_fast",
-        "description": "Optimized for speed with detailed output",
-        "suffix":      (
-            "\nSystem Rule: Each dialogue turn must contain at least 7 words. "
-            "No filler text, stage directions, or explanations outside the dialogue. "
-            "No numbering of turns. No digits before speaker names. "
-            "Start immediately with Person A:"
         ),
         "temperature": 0.5,
         "max_tokens":  384,
@@ -240,13 +154,13 @@ def _evaluate_candidate(candidate: dict, base_prompt: str, scenarios: list[str] 
 
     suffix = candidate["suffix"]
     temperature = candidate["temperature"]
-    max_tokens = candidate["max_tokens"]
+    max_tokens = min(candidate.get("max_tokens", 384), 384)
 
     full_prompt = base_prompt
     if suffix:
         full_prompt = base_prompt.rstrip() + "\n" + suffix.lstrip("\n")
 
-    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(5)
+    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(1)
 
     all_word_counts: list[int] = []
     all_sentence_counts: list[int] = []
@@ -341,8 +255,8 @@ def run_experiments(base_prompt: str, scenarios: list[str] | None = None) -> lis
     Returns a list of result dicts sorted best-first by quality_score.
     Each dict includes: name, description, suffix, metrics, score, latency_s, simulated.
     """
-    # Fetch 5 Redis scenarios if not explicitly passed
-    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(5)
+    # Fetch 1 Redis scenario if not explicitly passed
+    test_scenarios = scenarios if scenarios else fetch_recent_redis_scenarios(1)
 
     # Import mlflow lazily so tests can mock or skip it
     try:

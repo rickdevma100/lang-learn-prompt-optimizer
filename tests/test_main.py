@@ -15,9 +15,13 @@ def clear_jobs():
     jobs_db.clear()
     import app.main
     app.main.latest_job_id = None
+    app.main._is_optimizing = False
+    app.main._last_completed_at = 0.0
     yield
     jobs_db.clear()
     app.main.latest_job_id = None
+    app.main._is_optimizing = False
+    app.main._last_completed_at = 0.0
 
 
 @pytest.fixture
@@ -50,6 +54,15 @@ class TestOptimize:
         assert body["status"] == "pending"
         assert "job_id" in body
         assert body["trigger_alert"] == "TestAlert"
+
+    def test_returns_429_when_running(self, client):
+        import app.main
+        app.main._is_optimizing = True
+        resp = client.post("/optimize", json={
+            "trigger_alert": "TestAlert",
+        })
+        assert resp.status_code == 429
+        assert "already running" in resp.json()["detail"]
 
 
 # ─── GET /jobs/{job_id} ─────────────────────────────────────────────────────
@@ -138,6 +151,49 @@ class TestWebhook:
         assert resp.status_code == 202
         body = resp.json()
         assert body["jobs_started"] == 0
+
+    def test_skips_when_already_optimizing(self, client):
+        import app.main
+        app.main._is_optimizing = True
+        payload = {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {
+                        "alertname": "QualityDrop",
+                        "action": "optimize_prompt",
+                    },
+                }
+            ],
+        }
+        resp = client.post("/webhook", json=payload)
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["status"] == "skipped"
+        assert "already in progress" in body["message"]
+
+    def test_skips_when_in_cooldown(self, client):
+        import app.main
+        import time
+        app.main._last_completed_at = time.time()
+        payload = {
+            "status": "firing",
+            "alerts": [
+                {
+                    "status": "firing",
+                    "labels": {
+                        "alertname": "QualityDrop",
+                        "action": "optimize_prompt",
+                    },
+                }
+            ],
+        }
+        resp = client.post("/webhook", json=payload)
+        assert resp.status_code == 202
+        body = resp.json()
+        assert body["status"] == "skipped"
+        assert "cooldown active" in body["message"]
 
     def test_resolved_returns_no_action(self, client):
         payload = {

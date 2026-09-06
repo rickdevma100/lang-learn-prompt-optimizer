@@ -58,6 +58,16 @@ def _load_k8s_config():
         raise
 
 
+def _get_k8s_client():
+    """Retrieve kubernetes.client, checking sys.modules first for test mocks."""
+    import sys
+    client = sys.modules.get("kubernetes.client")
+    if client is not None:
+        return client
+    from kubernetes import client
+    return client
+
+
 def patch_prompt_configmap(new_prompt: str) -> bool:
     """Patch the 'prompts' ConfigMap to update scenario_dialogue.txt.
 
@@ -67,10 +77,8 @@ def patch_prompt_configmap(new_prompt: str) -> bool:
     Returns True on success, False on failure.
     """
     try:
-        # pyrefly: ignore [missing-import]
-        from kubernetes import client
-
         _load_k8s_config()
+        client = _get_k8s_client()
         v1 = client.CoreV1Api()
 
         # Read current ConfigMap to preserve other keys
@@ -108,10 +116,8 @@ def restart_inference_pods() -> bool:
     Returns True on success, False on failure.
     """
     try:
-        # pyrefly: ignore [missing-import]
-        from kubernetes import client
-
         _load_k8s_config()
+        client = _get_k8s_client()
         apps_v1 = client.AppsV1Api()
 
         now = datetime.now(timezone.utc).isoformat()

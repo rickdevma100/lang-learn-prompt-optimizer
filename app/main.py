@@ -12,6 +12,8 @@ from __future__ import annotations
 
 import asyncio
 import logging
+import os
+import time
 import uuid
 from datetime import datetime, timezone
 from enum import Enum
@@ -49,10 +51,15 @@ app = FastAPI(
 )
 
 # ---------------------------------------------------------------------------
-# In-memory job registry
+# In-memory job registry & concurrency protection
 # ---------------------------------------------------------------------------
 jobs_db: Dict[str, Dict[str, Any]] = {}
 latest_job_id: Optional[str] = None
+
+# Concurrency lock and cooldown to prevent overloading the local inference server
+_is_optimizing = False
+_last_completed_at = 0.0
+COOLDOWN_SECONDS = int(os.getenv("OPTIMIZATION_COOLDOWN_SECONDS", "600"))
 
 
 class JobStatus(str, Enum):
@@ -71,8 +78,7 @@ class OptimizeRequest(BaseModel):
     base_prompt: str = Field(default="")
     test_scenarios: List[str] = Field(
         default_factory=lambda: [
-            "ordering food at a restaurant in Berlin",
-            "booking a hotel room in Munich",
+            "ordering food at a restaurant",
         ]
     )
     service_url: Optional[str] = None
@@ -146,6 +152,8 @@ def _run_optimization_sync(
     service_url: Optional[str],
 ):
     """Wrapper to run the async optimizer inside a background thread."""
+    global _is_optimizing, _last_completed_at
+    _is_optimizing = True
     jobs_db[job_id]["status"] = JobStatus.RUNNING.value
     try:
         result = asyncio.run(
@@ -174,6 +182,9 @@ def _run_optimization_sync(
             "status": JobStatus.FAILED.value,
             "error": str(exc),
         })
+    finally:
+        _is_optimizing = False
+        _last_completed_at = time.time()
 
 
 def _create_job(trigger_alert: str) -> str:
@@ -217,6 +228,7 @@ async def alertmanager_webhook(
     Only processes alerts with status=firing AND action=optimize_prompt label.
     Returns 202 immediately; optimization runs asynchronously.
     """
+    global _is_optimizing, _last_completed_at
     logger.info(
         f"Received Alertmanager webhook: status={payload.status} "
         f"alerts={len(payload.alerts)}"
@@ -225,6 +237,26 @@ async def alertmanager_webhook(
     if payload.status == "resolved":
         logger.info("All alerts resolved — no optimization action required.")
         return {"status": "resolved", "message": "No action taken on resolved alerts."}
+
+    if _is_optimizing:
+        logger.warning("Optimization run is already in progress. Skipping duplicate webhook trigger.")
+        return {
+            "status": "skipped",
+            "message": "Optimization already in progress. Skipped to prevent inference server overload.",
+            "jobs_started": 0,
+            "job_ids": [],
+        }
+
+    now = time.time()
+    if now - _last_completed_at < COOLDOWN_SECONDS:
+        remaining = int(COOLDOWN_SECONDS - (now - _last_completed_at))
+        logger.warning(f"Optimization cooldown active ({remaining}s remaining). Skipping webhook trigger.")
+        return {
+            "status": "skipped",
+            "message": f"Optimization cooldown active ({remaining}s remaining). Skipped to prevent server overload.",
+            "jobs_started": 0,
+            "job_ids": [],
+        }
 
     triggered = []
     for alert in payload.alerts:
@@ -253,12 +285,12 @@ async def alertmanager_webhook(
             base_prompt="",          # optimizer loads from file
             scenarios=[
                 "ordering food at a restaurant",
-                "asking for directions at the station",
-                "shopping for clothes",
             ],
             service_url=None,
         )
         triggered.append(job_id)
+        # Process at most 1 alert per webhook to avoid queuing multiple parallel jobs
+        break
 
     return {
         "status": "Accepted",
@@ -280,6 +312,13 @@ async def trigger_manual_optimization(
 
     Returns 202 immediately with job_id; use GET /jobs/{job_id} to poll.
     """
+    global _is_optimizing
+    if _is_optimizing:
+        raise HTTPException(
+            status_code=status.HTTP_429_TOO_MANY_REQUESTS,
+            detail="An optimization job is already running. Please wait for it to finish.",
+        )
+
     job_id = _create_job(request.trigger_alert)
     background_tasks.add_task(
         _run_optimization_sync,

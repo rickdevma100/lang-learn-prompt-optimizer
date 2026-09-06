@@ -217,7 +217,7 @@ def _build_new_prompt(base: str, winner: dict) -> str:
         "base_prompt": base,
         "suffix": suffix,
         "temperature": 0.3,
-        "max_tokens": 1024,
+        "max_tokens": 512,
     }
 
     result = post_json(rewrite_url, payload, timeout=120)
@@ -290,7 +290,7 @@ async def run_prompt_optimization(
 
         # Step 2 — run MLflow experiments against inference service
         logger.info("Benchmarking candidate prompts via MLflow experiments…")
-        ranked = run_experiments(current_prompt)
+        ranked = run_experiments(current_prompt, scenarios=scenarios)
         result["all_candidates"] = ranked
 
         # Current baseline is always in the list (name="current")
